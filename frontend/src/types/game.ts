@@ -1,5 +1,6 @@
 export type GameStatus = '未开始' | '游玩中' | '已通关'
 export type BackgroundType = 'image' | 'video'
+export type QueueMode = 'default' | 'custom'
 
 export interface Game {
   id: string
@@ -24,4 +25,6 @@ export interface Game {
   backgroundGradient: string
   coverGradient: string
   accent: string
+  importedAt: string
+  lastPlayedAt?: string
 }

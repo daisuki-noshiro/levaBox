@@ -1,21 +1,336 @@
 <script setup lang="ts">
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import DeviceStatus from '../components/DeviceStatus.vue'
 import GameCard from '../components/GameCard.vue'
-import type { Game } from '../types/game'
+import { playUiSound, unlockMediaAudio } from '../services/audioService'
+import { launchGame } from '../services/gameLauncher'
+import { registerLobbyGamepadInput } from '../services/inputService'
+import type { Game, QueueMode } from '../types/game'
 import type { MainPage } from '../types/navigation'
 
-defineProps<{ games: Game[]; selectedGame: Game }>()
-defineEmits<{
+type MenuActionId = 'launch' | 'front' | 'reorder' | 'remove' | 'restore'
+
+const props = defineProps<{
+  queue: Game[]
+  selectedGame: Game | null
+  queueMode: QueueMode
+  batteryLevel: number
+  sidebarOpen: boolean
+}>()
+
+const emit = defineEmits<{
   selectGame: [game: Game]
-  openDetail: [game: Game]
   notify: [message: string]
   openMenu: []
+  closeMenu: []
   navigate: [page: MainPage]
+  moveToFront: [gameId: string]
+  commitReorder: [orderedIds: string[]]
+  removeFromQueue: [gameId: string]
+  restoreDefault: []
 }>()
+
+const actionMenuOpen = ref(false)
+const confirmRestoreOpen = ref(false)
+const focusedActionIndex = ref(0)
+const confirmChoice = ref<0 | 1>(0)
+const actionButtons = ref<HTMLButtonElement[]>([])
+const confirmButtons = ref<HTMLButtonElement[]>([])
+const cardsContainer = ref<HTMLElement | null>(null)
+const reorderGameId = ref<string | null>(null)
+const reorderDraft = ref<Game[]>([])
+const reorderOriginalIds = ref<string[]>([])
+const dropCommitted = ref(false)
+let unregisterGamepadInput: () => void = () => undefined
+
+const isReordering = computed(() => reorderGameId.value !== null)
+const displayQueue = computed(() => isReordering.value ? reorderDraft.value : props.queue)
+const selectedIndex = computed(() => props.selectedGame
+  ? props.queue.findIndex((game) => game.id === props.selectedGame?.id)
+  : -1)
+
+const menuActions = computed<Array<{ id: MenuActionId; label: string; primary?: boolean }>>(() => {
+  const actions: Array<{ id: MenuActionId; label: string; primary?: boolean }> = [
+    { id: 'launch', label: '开始游戏', primary: true },
+  ]
+  if (selectedIndex.value > 0) actions.push({ id: 'front', label: '设为队首' })
+  actions.push(
+    { id: 'reorder', label: '顺序调整' },
+    { id: 'remove', label: '移除队列' },
+    { id: 'restore', label: '恢复默认队列' },
+  )
+  return actions
+})
+
+function setActionButton(element: unknown, index: number) {
+  if (element instanceof HTMLButtonElement) actionButtons.value[index] = element
+}
+
+function setConfirmButton(element: unknown, index: number) {
+  if (element instanceof HTMLButtonElement) confirmButtons.value[index] = element
+}
+
+function requestOpenSidebar() {
+  playUiSound('open')
+  emit('openMenu')
+}
+
+function navigate(page: MainPage) {
+  playUiSound('confirm')
+  emit('navigate', page)
+}
+
+function handleGameClick(game: Game) {
+  if (isReordering.value) return
+  unlockMediaAudio()
+  if (props.selectedGame?.id === game.id) {
+    openActionMenu()
+    return
+  }
+  playUiSound('select')
+  emit('selectGame', game)
+}
+
+function selectAdjacent(direction: -1 | 1) {
+  if (!props.selectedGame || !props.queue.length) return
+  const index = props.queue.findIndex((game) => game.id === props.selectedGame?.id)
+  const nextIndex = Math.min(props.queue.length - 1, Math.max(0, index + direction))
+  const nextGame = props.queue[nextIndex]
+  if (!nextGame || nextGame.id === props.selectedGame.id) return
+  playUiSound('select')
+  emit('selectGame', nextGame)
+}
+
+function openActionMenu() {
+  if (!props.selectedGame || isReordering.value || confirmRestoreOpen.value) return
+  playUiSound('open')
+  actionMenuOpen.value = true
+  focusedActionIndex.value = 0
+  actionButtons.value = []
+  nextTick(() => actionButtons.value[0]?.focus())
+}
+
+function closeActionMenu() {
+  if (!actionMenuOpen.value) return
+  playUiSound('cancel')
+  actionMenuOpen.value = false
+}
+
+function focusAction(index: number) {
+  const count = menuActions.value.length
+  if (!count) return
+  focusedActionIndex.value = (index + count) % count
+  nextTick(() => actionButtons.value[focusedActionIndex.value]?.focus())
+}
+
+async function executeAction(action: MenuActionId) {
+  const game = props.selectedGame
+  if (!game) return
+  if (action === 'launch') {
+    playUiSound('launch')
+    const result = await launchGame(game)
+    emit('notify', result.message)
+    actionMenuOpen.value = false
+    return
+  }
+  if (action === 'front') {
+    playUiSound('confirm')
+    emit('moveToFront', game.id)
+    actionMenuOpen.value = false
+    return
+  }
+  if (action === 'reorder') {
+    beginReorder(game)
+    return
+  }
+  if (action === 'remove') {
+    playUiSound('confirm')
+    emit('removeFromQueue', game.id)
+    actionMenuOpen.value = false
+    return
+  }
+  actionMenuOpen.value = false
+  openRestoreConfirmation()
+}
+
+function beginReorder(game: Game) {
+  playUiSound('confirm')
+  reorderOriginalIds.value = props.queue.map((item) => item.id)
+  reorderDraft.value = [...props.queue]
+  reorderGameId.value = game.id
+  dropCommitted.value = false
+  actionMenuOpen.value = false
+}
+
+function moveReorderingGame(direction: -1 | 1) {
+  if (!reorderGameId.value) return
+  const currentIndex = reorderDraft.value.findIndex((game) => game.id === reorderGameId.value)
+  const targetIndex = Math.min(reorderDraft.value.length - 1, Math.max(0, currentIndex + direction))
+  if (currentIndex < 0 || currentIndex === targetIndex) return
+  moveDraftItem(currentIndex, targetIndex)
+  playUiSound('select')
+}
+
+function moveDraftItem(fromIndex: number, toIndex: number) {
+  const nextQueue = [...reorderDraft.value]
+  const [movingGame] = nextQueue.splice(fromIndex, 1)
+  if (!movingGame) return
+  nextQueue.splice(toIndex, 0, movingGame)
+  reorderDraft.value = nextQueue
+}
+
+function confirmReorder() {
+  if (!isReordering.value) return
+  const nextIds = reorderDraft.value.map((game) => game.id)
+  const changed = nextIds.some((id, index) => id !== reorderOriginalIds.value[index])
+  if (changed) emit('commitReorder', nextIds)
+  playUiSound('confirm')
+  clearReorderState()
+}
+
+function cancelReorder() {
+  if (!isReordering.value) return
+  playUiSound('cancel')
+  clearReorderState()
+}
+
+function clearReorderState() {
+  reorderGameId.value = null
+  reorderDraft.value = []
+  reorderOriginalIds.value = []
+}
+
+function handleDragStart(game: Game, event: DragEvent) {
+  if (game.id !== reorderGameId.value) {
+    event.preventDefault()
+    return
+  }
+  dropCommitted.value = false
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', game.id)
+  }
+}
+
+function handleDragOver(game: Game, event: DragEvent) {
+  if (!reorderGameId.value) return
+  event.preventDefault()
+  const fromIndex = reorderDraft.value.findIndex((item) => item.id === reorderGameId.value)
+  const toIndex = reorderDraft.value.findIndex((item) => item.id === game.id)
+  if (fromIndex >= 0 && toIndex >= 0 && fromIndex !== toIndex) moveDraftItem(fromIndex, toIndex)
+}
+
+function handleDrop(_game: Game, event: DragEvent) {
+  if (!isReordering.value) return
+  event.preventDefault()
+  dropCommitted.value = true
+  confirmReorder()
+}
+
+function handleDragEnd() {
+  if (isReordering.value && !dropCommitted.value) cancelReorder()
+}
+
+function openRestoreConfirmation() {
+  playUiSound('open')
+  confirmRestoreOpen.value = true
+  confirmChoice.value = 0
+  confirmButtons.value = []
+  nextTick(() => confirmButtons.value[0]?.focus())
+}
+
+function closeRestoreConfirmation() {
+  if (!confirmRestoreOpen.value) return
+  playUiSound('cancel')
+  confirmRestoreOpen.value = false
+}
+
+function confirmRestore() {
+  playUiSound('confirm')
+  emit('restoreDefault')
+  confirmRestoreOpen.value = false
+}
+
+function handleKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    if (isReordering.value) cancelReorder()
+    else if (confirmRestoreOpen.value) closeRestoreConfirmation()
+    else if (actionMenuOpen.value) closeActionMenu()
+    else if (props.sidebarOpen) emit('closeMenu')
+    else requestOpenSidebar()
+    return
+  }
+
+  if (props.sidebarOpen) return
+
+  if (actionMenuOpen.value && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+    event.preventDefault()
+    focusAction(focusedActionIndex.value + (event.key === 'ArrowDown' ? 1 : -1))
+    return
+  }
+
+  if (confirmRestoreOpen.value && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+    event.preventDefault()
+    confirmChoice.value = confirmChoice.value === 0 ? 1 : 0
+    nextTick(() => confirmButtons.value[confirmChoice.value]?.focus())
+    return
+  }
+
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    if (confirmRestoreOpen.value) {
+      confirmChoice.value === 0 ? confirmRestore() : closeRestoreConfirmation()
+    } else if (isReordering.value) {
+      confirmReorder()
+    } else if (actionMenuOpen.value) {
+      void executeAction(menuActions.value[focusedActionIndex.value]?.id ?? 'launch')
+    } else {
+      openActionMenu()
+    }
+    return
+  }
+
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+  event.preventDefault()
+  const direction = event.key === 'ArrowRight' ? 1 : -1
+  if (isReordering.value) moveReorderingGame(direction)
+  else if (!actionMenuOpen.value && !confirmRestoreOpen.value) selectAdjacent(direction)
+}
+
+function scrollSelectedIntoView() {
+  const selectedId = props.selectedGame?.id
+  if (!selectedId || !cardsContainer.value) return
+  nextTick(() => {
+    const card = cardsContainer.value?.querySelector<HTMLElement>(`[data-game-id="${selectedId}"]`)
+    card?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+  })
+}
+
+watch(() => props.selectedGame?.id, scrollSelectedIntoView)
+watch(() => props.queue.map((game) => game.id).join('|'), scrollSelectedIntoView)
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeydown)
+  unregisterGamepadInput = registerLobbyGamepadInput({
+    moveLeft: () => isReordering.value ? moveReorderingGame(-1) : selectAdjacent(-1),
+    moveRight: () => isReordering.value ? moveReorderingGame(1) : selectAdjacent(1),
+    confirm: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' })),
+    cancel: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })),
+    openMenu: requestOpenSidebar,
+  })
+  scrollSelectedIntoView()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown)
+  unregisterGamepadInput()
+})
 </script>
 
 <template>
-  <section class="home">
-    <div class="home__media" aria-hidden="true">
+  <section class="home" :class="{ 'home--modal-open': actionMenuOpen || confirmRestoreOpen }">
+    <div v-if="selectedGame" class="home__media" aria-hidden="true">
       <Transition name="media-fade" mode="out-in">
         <video
           v-if="selectedGame.backgroundType === 'video' && selectedGame.backgroundVideo"
@@ -24,11 +339,7 @@ defineEmits<{
           :src="selectedGame.backgroundVideo"
           :poster="selectedGame.backgroundImage"
           :style="{ objectPosition: selectedGame.backgroundPosition ?? 'center' }"
-          autoplay
-          muted
-          loop
-          playsinline
-          preload="metadata"
+          autoplay muted loop playsinline preload="metadata"
         ></video>
         <img
           v-else
@@ -42,117 +353,189 @@ defineEmits<{
     </div>
     <div class="home__shade"></div>
 
+    <DeviceStatus :battery-level="batteryLevel" />
+
     <nav class="home-rail" aria-label="大厅快捷导航">
-      <button class="home-rail__menu" aria-label="展开主菜单" @click="$emit('openMenu')">
+      <button class="home-rail__menu" aria-label="展开主菜单" @click="requestOpenSidebar">
         <span class="home-rail__menu-lines"><i></i><i></i><i></i></span><strong>levaBox</strong>
       </button>
       <div class="home-rail__divider"></div>
-      <button class="home-rail__item home-rail__item--active" @click="$emit('navigate', 'home')"><span>⌂</span><strong>大厅</strong></button>
-      <button class="home-rail__item" @click="$emit('navigate', 'library')"><span>▦</span><strong>游戏库</strong></button>
+      <button class="home-rail__item home-rail__item--active" @click="navigate('home')"><span>⌂</span><strong>大厅</strong></button>
+      <button class="home-rail__item" @click="navigate('library')"><span>▦</span><strong>游戏库</strong></button>
       <button class="home-rail__item" @click="$emit('notify', '收藏筛选可在游戏库中查看')"><span>♥</span><strong>收藏</strong></button>
       <button class="home-rail__item" @click="$emit('notify', '最近游玩记录将在后续阶段接入')"><span>◷</span><strong>最近游玩</strong></button>
-      <button class="home-rail__item" @click="$emit('navigate', 'import')"><span>＋</span><strong>导入游戏</strong></button>
-      <button class="home-rail__item home-rail__item--bottom" @click="$emit('navigate', 'settings')"><span>⚙</span><strong>设置</strong></button>
+      <button class="home-rail__item" @click="navigate('import')"><span>＋</span><strong>导入游戏</strong></button>
+      <button class="home-rail__item home-rail__item--bottom" @click="navigate('settings')"><span>⚙</span><strong>设置</strong></button>
     </nav>
 
     <Transition name="hero" mode="out-in">
-      <article :key="selectedGame.id" class="home__hero">
-        <p class="home__eyebrow">
-          <span class="home__live-dot"></span>
-          {{ selectedGame.backgroundType === 'video' ? '动态背景' : '精选游戏' }} · {{ selectedGame.genres.join(' / ') }}
-        </p>
+      <article v-if="selectedGame" :key="selectedGame.id" class="home__info">
         <img v-if="selectedGame.logo" class="home__logo" :src="selectedGame.logo" :alt="selectedGame.title" />
-        <button v-else class="home__title" @click="$emit('openDetail', selectedGame)">{{ selectedGame.title }}</button>
-        <p class="home__subtitle">{{ selectedGame.subtitle }}</p>
-        <p class="home__description">{{ selectedGame.shortDescription }}</p>
-        <div class="home__meta">
-          <span>{{ selectedGame.developer }}</span><i></i><span>{{ selectedGame.year }}</span><i></i><span>{{ selectedGame.status }}</span>
-        </div>
-        <div class="home__actions">
-          <button class="button button--primary" @click="$emit('notify', `“${selectedGame.title}”的启动功能将在后续阶段接入`)" >▶ 开始游戏</button>
-          <button class="button button--glass" @click="$emit('openDetail', selectedGame)">查看详情</button>
+        <h1 v-else>{{ selectedGame.title }}</h1>
+        <p class="home__company">{{ selectedGame.developer }} · {{ selectedGame.year }}</p>
+        <div class="home__details">
+          <span v-for="genre in selectedGame.genres" :key="genre" class="home__tag">{{ genre }}</span>
+          <span class="home__status"><i></i>{{ selectedGame.status }}</span>
         </div>
       </article>
     </Transition>
 
-    <section class="home__carousel" aria-label="游戏封面轮播">
+    <section v-if="queue.length" class="home__carousel" aria-label="游戏队列">
       <header class="home__carousel-header">
-        <div><span></span><strong>游戏大厅</strong><small>选择游戏以切换背景</small></div>
-        <p><b>{{ String(games.findIndex((game) => game.id === selectedGame.id) + 1).padStart(2, '0') }}</b> / {{ String(games.length).padStart(2, '0') }}</p>
+        <div><span></span><strong>游戏队列</strong><small>{{ queueMode === 'custom' ? '自定义顺序' : '默认顺序' }}</small></div>
+        <p v-if="isReordering">← / → 调整位置　Enter 确认　Esc 取消</p>
       </header>
-      <div class="home__cards">
-        <GameCard
-          v-for="game in games"
-          :key="game.id"
-          :game="game"
-          variant="rail"
-          :selected="game.id === selectedGame.id"
-          @select="$emit('selectGame', $event)"
-        />
+      <div ref="cardsContainer" class="home__cards">
+        <TransitionGroup name="queue">
+          <GameCard
+            v-for="game in displayQueue"
+            :key="game.id"
+            :game="game"
+            variant="rail"
+            :selected="game.id === selectedGame?.id"
+            :reordering="isReordering"
+            :moving="game.id === reorderGameId"
+            @select="handleGameClick"
+            @drag-start="handleDragStart"
+            @drag-over="handleDragOver"
+            @drop="handleDrop"
+            @drag-end="handleDragEnd"
+          />
+        </TransitionGroup>
       </div>
     </section>
+
+    <section v-else class="home__empty">
+      <span>＋</span><h1>游戏队列为空</h1><p>游戏资料仍保留在游戏库中。</p>
+      <button @click="navigate('library')">打开游戏库</button>
+    </section>
+
+    <Transition name="dialog-fade">
+      <div v-if="actionMenuOpen && selectedGame" class="home-dialog-layer" role="presentation" @click.self="closeActionMenu">
+        <section class="game-menu" role="dialog" aria-modal="true" :aria-label="`${selectedGame.title}操作菜单`">
+          <header><small>队列操作</small><h2>{{ selectedGame.title }}</h2></header>
+          <div class="game-menu__actions">
+            <button
+              v-for="(action, index) in menuActions"
+              :key="action.id"
+              :ref="(element) => setActionButton(element, index)"
+              :class="{ 'game-menu__action--primary': action.primary }"
+              @focus="focusedActionIndex = index"
+              @click="executeAction(action.id)"
+            >{{ action.label }}</button>
+          </div>
+          <footer>Enter 确认　Esc 返回</footer>
+        </section>
+      </div>
+    </Transition>
+
+    <Transition name="dialog-fade">
+      <div v-if="confirmRestoreOpen" class="home-dialog-layer" role="presentation" @click.self="closeRestoreConfirmation">
+        <section class="confirm-dialog" role="alertdialog" aria-modal="true" aria-label="恢复默认队列确认">
+          <small>恢复默认队列</small>
+          <p>恢复默认队列后，手动调整的顺序将被清除。</p>
+          <div>
+            <button :ref="(element) => setConfirmButton(element, 0)" class="confirm-dialog__primary" @focus="confirmChoice = 0" @click="confirmRestore">确认恢复</button>
+            <button :ref="(element) => setConfirmButton(element, 1)" @focus="confirmChoice = 1" @click="closeRestoreConfirmation">取消</button>
+          </div>
+        </section>
+      </div>
+    </Transition>
   </section>
 </template>
 
 <style scoped>
-.home { position: relative; height: 100%; min-height: 0; overflow: hidden; background: #070b12; }
+.home { position: relative; height: 100%; min-height: 0; overflow: hidden; background: radial-gradient(circle at 70% 20%, #182438, #070b12 64%); }
 .home__media, .home__backdrop, .home__shade { position: absolute; inset: 0; }
+.home__media { transition: filter 180ms ease, transform 180ms ease; }
 .home__backdrop { width: 100%; height: 100%; object-fit: cover; }
-.home__shade { background: linear-gradient(90deg, rgba(3, 7, 13, .93) 0%, rgba(3, 7, 13, .7) 27%, rgba(3, 7, 13, .12) 63%, rgba(3, 7, 13, .08) 100%), linear-gradient(0deg, rgba(3, 7, 13, .96) 0%, rgba(3, 7, 13, .58) 26%, transparent 57%), linear-gradient(180deg, rgba(3, 7, 13, .25), transparent 22%); }
+.home__shade { background: linear-gradient(90deg, rgba(3, 7, 13, .82) 0%, rgba(3, 7, 13, .4) 29%, rgba(3, 7, 13, .05) 68%), linear-gradient(0deg, rgba(3, 7, 13, .93) 0%, rgba(3, 7, 13, .36) 27%, transparent 57%), linear-gradient(180deg, rgba(3, 7, 13, .25), transparent 20%); transition: background 180ms ease; }
+.home--modal-open .home__media { filter: blur(6px) brightness(.66); transform: scale(1.015); }
+.home--modal-open .home__shade { background: rgba(3, 7, 13, .44); }
 
-.home-rail { position: absolute; z-index: 10; top: 18px; bottom: 18px; left: 18px; display: flex; flex-direction: column; width: 58px; padding: 7px; overflow: hidden; border: 1px solid rgba(255, 255, 255, .11); border-radius: 18px; background: rgba(5, 10, 18, .7); box-shadow: 0 18px 50px rgba(0, 0, 0, .28); backdrop-filter: blur(16px); transition: width 180ms ease, background 180ms ease; }
-.home-rail:hover, .home-rail:focus-within { width: 178px; background: rgba(5, 10, 18, .9); }
-.home-rail button { display: flex; align-items: center; flex: 0 0 auto; width: 162px; height: 44px; padding: 0; border: 0; border-radius: 12px; color: #9da9b9; background: transparent; cursor: pointer; }
-.home-rail button:hover, .home-rail button:focus-visible { color: #fff; outline: none; background: rgba(255, 255, 255, .09); }
-.home-rail__menu { color: #fff !important; }
-.home-rail__menu-lines, .home-rail__item > span { display: grid; place-items: center; flex: 0 0 42px; width: 42px; }
+.home-rail { position: absolute; z-index: 10; inset: 0 auto 0 0; display: flex; flex-direction: column; width: 64px; padding: 18px 7px; overflow: hidden; border: 0; background: transparent; transition: width 180ms ease, background 180ms ease, box-shadow 180ms ease, backdrop-filter 180ms ease; }
+.home-rail:hover, .home-rail:focus-within { width: 184px; background: rgba(5, 10, 18, .82); box-shadow: 18px 0 50px rgba(0, 0, 0, .28); backdrop-filter: blur(18px); }
+.home-rail button { display: flex; align-items: center; flex: 0 0 auto; width: 168px; height: 44px; padding: 0; border: 0; border-radius: 11px; color: #d6dee8; background: transparent; opacity: .42; cursor: pointer; transition: opacity 140ms ease, background 140ms ease; }
+.home-rail button:hover, .home-rail button:focus-visible { color: #fff; opacity: 1; outline: none; background: rgba(255, 255, 255, .08); }
+.home-rail__menu { opacity: .62 !important; }
+.home-rail__menu-lines, .home-rail__item > span { display: grid; place-items: center; flex: 0 0 48px; width: 48px; }
 .home-rail__menu-lines { gap: 4px; }
-.home-rail__menu-lines i { display: block; width: 18px; height: 2px; border-radius: 9px; background: #fff; }
+.home-rail__menu-lines i { display: block; width: 17px; height: 2px; border-radius: 9px; background: currentColor; }
 .home-rail strong { opacity: 0; white-space: nowrap; transition: opacity 100ms ease 30ms; }
 .home-rail:hover strong, .home-rail:focus-within strong { opacity: 1; }
-.home-rail__menu strong { font-size: .85rem; letter-spacing: .04em; }
-.home-rail__divider { height: 1px; margin: 7px 5px 9px; background: rgba(255, 255, 255, .09); }
+.home-rail__menu strong { font-size: .82rem; letter-spacing: .05em; }
+.home-rail__divider { height: 1px; margin: 7px 8px 9px; background: transparent; transition: background 180ms ease; }
+.home-rail:hover .home-rail__divider, .home-rail:focus-within .home-rail__divider { background: rgba(255, 255, 255, .09); }
 .home-rail__item { margin-bottom: 4px; font-size: .78rem; text-align: left; }
-.home-rail__item > span { font-size: 1.2rem; }
-.home-rail__item--active { color: #fff !important; background: linear-gradient(90deg, rgba(91, 206, 255, .22), rgba(91, 206, 255, .05)) !important; }
-.home-rail__item--active::before { content: ''; position: absolute; left: 0; width: 3px; height: 24px; border-radius: 99px; background: #72dfff; box-shadow: 0 0 12px #72dfff; }
+.home-rail__item > span { font-size: 1.18rem; }
+.home-rail__item--active { color: #fff !important; opacity: .82 !important; }
+.home-rail:hover .home-rail__item--active, .home-rail:focus-within .home-rail__item--active { background: linear-gradient(90deg, rgba(91, 206, 255, .18), rgba(91, 206, 255, .03)); }
+.home-rail__item--active::before { content: ''; position: absolute; left: 0; width: 3px; height: 22px; border-radius: 99px; background: #72dfff; box-shadow: 0 0 10px #72dfff; }
 .home-rail__item--bottom { margin-top: auto; }
 
-.home__hero { position: relative; z-index: 3; width: min(520px, 45vw); padding: clamp(80px, 11vh, 118px) 0 0 clamp(100px, 8.2vw, 156px); }
-.home__eyebrow { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; color: #c3cfda; font-size: .68rem; font-weight: 700; letter-spacing: .12em; }
-.home__live-dot { width: 7px; height: 7px; border-radius: 50%; background: #67e2ff; box-shadow: 0 0 12px #67e2ff; }
-.home__logo { display: block; max-width: min(430px, 38vw); max-height: 125px; object-fit: contain; object-position: left center; }
-.home__title { display: block; max-width: 100%; padding: 0; border: 0; color: #fff; background: transparent; font: inherit; font-size: clamp(2.7rem, 4.6vw, 5.3rem); font-weight: 800; line-height: 1.05; letter-spacing: -.06em; text-align: left; text-shadow: 0 10px 35px rgba(0, 0, 0, .48); cursor: pointer; }
-.home__title:hover { color: #dff8ff; }
-.home__subtitle { margin: 6px 0 16px; color: rgba(255, 255, 255, .58); font-size: clamp(.72rem, 1vw, .92rem); letter-spacing: .11em; }
-.home__description { max-width: 440px; margin: 0; color: #d8e0e9; font-size: clamp(.82rem, 1.04vw, .95rem); line-height: 1.6; text-shadow: 0 2px 16px rgba(0, 0, 0, .65); }
-.home__meta { display: flex; align-items: center; gap: 9px; margin-top: 13px; color: #b6c0ce; font-size: .68rem; }
-.home__meta i { width: 3px; height: 3px; border-radius: 50%; background: #6e7a89; }
-.home__actions { display: flex; gap: 10px; margin-top: 18px; }
-.home__actions .button { min-height: 43px; padding: 0 17px; font-size: .8rem; }
+.home__info { position: absolute; z-index: 3; left: clamp(88px, 8.2vw, 150px); bottom: clamp(196px, 28vh, 248px); width: min(540px, 50vw); text-shadow: 0 3px 18px rgba(0, 0, 0, .72); }
+.home__info h1 { margin: 0; max-width: 540px; font-size: clamp(2.4rem, 4.5vw, 5.1rem); line-height: 1.02; letter-spacing: -.06em; }
+.home__logo { display: block; max-width: min(430px, 38vw); max-height: 112px; object-fit: contain; object-position: left center; }
+.home__company { margin: 10px 0 13px; color: rgba(255, 255, 255, .74); font-size: .77rem; letter-spacing: .04em; }
+.home__details { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+.home__tag, .home__status { padding: 5px 9px; border: 1px solid rgba(255, 255, 255, .15); border-radius: 999px; color: rgba(255, 255, 255, .78); background: rgba(4, 9, 17, .2); font-size: .66rem; backdrop-filter: blur(6px); }
+.home__status { display: flex; align-items: center; gap: 6px; margin-left: 2px; color: #fff; }
+.home__status i { width: 5px; height: 5px; border-radius: 50%; background: #74e2ff; box-shadow: 0 0 8px #74e2ff; }
 
-.home__carousel { position: absolute; z-index: 4; right: 0; bottom: 0; left: 0; padding: 0 clamp(25px, 3.4vw, 58px) clamp(15px, 2vh, 24px) clamp(96px, 7.7vw, 148px); }
-.home__carousel-header { display: flex; align-items: end; justify-content: space-between; margin-bottom: 10px; }
+.home__carousel { position: absolute; z-index: 4; right: 0; bottom: 0; left: 0; padding: 0 0 7px 76px; }
+.home__carousel-header { display: flex; align-items: end; justify-content: space-between; min-height: 24px; padding: 0 32px 7px 12px; }
 .home__carousel-header div { display: flex; align-items: center; gap: 9px; }
-.home__carousel-header div > span { width: 3px; height: 20px; border-radius: 9px; background: #70ddff; box-shadow: 0 0 10px #70ddff; }
-.home__carousel-header strong { font-size: .88rem; }
-.home__carousel-header small { color: #8491a1; font-size: .65rem; }
-.home__carousel-header p { margin: 0; color: #7f8b9b; font-size: .7rem; }
-.home__carousel-header b { color: #fff; font-size: .95rem; }
-.home__cards { display: flex; gap: clamp(12px, 1.25vw, 20px); padding: 8px 4px 5px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.home__carousel-header div > span { width: 3px; height: 18px; border-radius: 9px; background: #70ddff; box-shadow: 0 0 10px #70ddff; }
+.home__carousel-header strong { font-size: .86rem; }
+.home__carousel-header small { color: rgba(255, 255, 255, .48); font-size: .62rem; }
+.home__carousel-header p { margin: 0; color: rgba(255, 255, 255, .68); font-size: .66rem; }
+.home__cards { display: flex; gap: clamp(10px, 1.15vw, 18px); padding: 19px clamp(90px, 9vw, 150px) 3px 9px; overflow-x: auto; overflow-y: hidden; scroll-behavior: smooth; scrollbar-width: none; mask-image: linear-gradient(90deg, transparent 0, #000 2%, #000 94%, transparent 100%); }
 .home__cards::-webkit-scrollbar { display: none; }
+.queue-move { transition: transform 230ms ease; }
 
-.media-fade-enter-active, .media-fade-leave-active { transition: opacity 300ms ease; }
+.home__empty { position: absolute; z-index: 4; top: 50%; left: 50%; display: grid; justify-items: center; transform: translate(-50%, -50%); color: rgba(255, 255, 255, .72); text-align: center; }
+.home__empty > span { display: grid; place-items: center; width: 52px; height: 52px; border: 1px solid rgba(255, 255, 255, .18); border-radius: 16px; font-size: 1.7rem; }
+.home__empty h1 { margin: 15px 0 4px; color: #fff; font-size: 1.35rem; }
+.home__empty p { margin: 0 0 18px; font-size: .76rem; }
+.home__empty button { min-height: 40px; padding: 0 16px; border: 1px solid rgba(116, 223, 255, .32); border-radius: 11px; color: #dff8ff; background: rgba(93, 201, 241, .11); cursor: pointer; }
+
+.home-dialog-layer { position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(2, 5, 10, .24); }
+.game-menu { width: 324px; padding: 20px; border: 1px solid rgba(255, 255, 255, .14); border-radius: 19px; background: rgba(8, 14, 24, .9); box-shadow: 0 26px 70px rgba(0, 0, 0, .48); backdrop-filter: blur(24px); }
+.game-menu header { margin-bottom: 15px; text-align: center; }
+.game-menu header small, .confirm-dialog > small { color: #77defb; font-size: .62rem; font-weight: 700; letter-spacing: .16em; }
+.game-menu h2 { margin: 5px 0 0; overflow: hidden; color: #fff; font-size: 1.05rem; white-space: nowrap; text-overflow: ellipsis; }
+.game-menu__actions { display: grid; gap: 7px; }
+.game-menu__actions button { width: 100%; height: 43px; padding: 0 16px; border: 1px solid rgba(255, 255, 255, .1); border-radius: 11px; color: rgba(255, 255, 255, .83); background: rgba(255, 255, 255, .055); cursor: pointer; }
+.game-menu__actions button:hover, .game-menu__actions button:focus-visible { border-color: rgba(129, 225, 255, .58); color: #fff; outline: none; background: rgba(105, 205, 241, .13); box-shadow: 0 0 0 2px rgba(100, 214, 255, .1); }
+.game-menu__actions .game-menu__action--primary { height: 49px; border-color: rgba(139, 230, 255, .5); color: #07121b; background: linear-gradient(135deg, #e7faff, #7edcf7); font-weight: 800; }
+.game-menu__actions .game-menu__action--primary:hover, .game-menu__actions .game-menu__action--primary:focus-visible { color: #041018; background: linear-gradient(135deg, #fff, #98e9ff); box-shadow: 0 0 0 2px rgba(156, 235, 255, .35), 0 8px 22px rgba(79, 199, 235, .2); }
+.game-menu footer { margin-top: 13px; color: rgba(255, 255, 255, .38); font-size: .58rem; text-align: center; }
+
+.confirm-dialog { width: min(390px, calc(100vw - 40px)); padding: 24px; border: 1px solid rgba(255, 255, 255, .14); border-radius: 18px; background: rgba(8, 14, 24, .94); box-shadow: 0 26px 70px rgba(0, 0, 0, .5); backdrop-filter: blur(24px); }
+.confirm-dialog p { margin: 10px 0 20px; color: rgba(255, 255, 255, .78); font-size: .82rem; line-height: 1.6; }
+.confirm-dialog div { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.confirm-dialog button { height: 42px; border: 1px solid rgba(255, 255, 255, .12); border-radius: 10px; color: #fff; background: rgba(255, 255, 255, .06); cursor: pointer; }
+.confirm-dialog button:hover, .confirm-dialog button:focus-visible { border-color: #7adefb; outline: none; box-shadow: 0 0 0 2px rgba(122, 222, 251, .14); }
+.confirm-dialog .confirm-dialog__primary { color: #07121b; background: #92e6fc; font-weight: 800; }
+
+.media-fade-enter-active, .media-fade-leave-active { transition: opacity 280ms ease; }
 .media-fade-enter-from, .media-fade-leave-to { opacity: 0; }
-.hero-enter-active, .hero-leave-active { transition: opacity 170ms ease, transform 170ms ease; }
-.hero-enter-from { opacity: 0; transform: translateY(10px); }
-.hero-leave-to { opacity: 0; transform: translateY(-7px); }
+.hero-enter-active, .hero-leave-active { transition: opacity 160ms ease, transform 160ms ease; }
+.hero-enter-from { opacity: 0; transform: translateY(8px); }
+.hero-leave-to { opacity: 0; transform: translateY(-6px); }
+.dialog-fade-enter-active, .dialog-fade-leave-active { transition: opacity 150ms ease; }
+.dialog-fade-enter-from, .dialog-fade-leave-to { opacity: 0; }
 
-@media (max-height: 760px) {
-  .home__hero { padding-top: 72px; }
-  .home__title { font-size: clamp(2.5rem, 4.2vw, 4.4rem); }
-  .home__subtitle { margin-bottom: 10px; }
-  .home__actions { margin-top: 13px; }
-  .home__carousel { padding-bottom: 13px; }
+@media (max-width: 1100px) {
+  .home__info { left: 84px; bottom: 206px; width: 54vw; }
+  .home__info h1 { font-size: clamp(2.2rem, 4.6vw, 3.8rem); }
+  .home__carousel { padding-left: 68px; }
+}
+
+@media (max-height: 700px) {
+  .home__info { bottom: 184px; }
+  .home__info h1 { font-size: clamp(2.1rem, 4vw, 3.7rem); }
+  .home__company { margin: 7px 0 9px; }
+  .home__cards { padding-top: 15px; }
 }
 </style>

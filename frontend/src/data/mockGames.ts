@@ -23,6 +23,8 @@ export const mockGames: Game[] = [
     backgroundGradient: 'linear-gradient(125deg, #16121d, #b1465b)',
     coverGradient: 'linear-gradient(145deg, #ffb75d, #8e2639)',
     accent: '#ff6f86',
+    importedAt: '2026-07-02T10:00:00+08:00',
+    lastPlayedAt: '2026-08-05T20:16:00+08:00',
   },
   {
     id: 'sweet-girlfriend-2',
@@ -46,6 +48,7 @@ export const mockGames: Game[] = [
     backgroundGradient: 'linear-gradient(125deg, #362028, #d88b68)',
     coverGradient: 'linear-gradient(145deg, #f7c5b4, #8f4e5a)',
     accent: '#ffb59f',
+    importedAt: '2026-07-08T10:00:00+08:00',
   },
   {
     id: 'aokana',
@@ -68,6 +71,8 @@ export const mockGames: Game[] = [
     backgroundGradient: 'linear-gradient(125deg, #0f315d, #4fc1f2)',
     coverGradient: 'linear-gradient(145deg, #55c8f4, #173f7a)',
     accent: '#62d8ff',
+    importedAt: '2026-07-11T10:00:00+08:00',
+    lastPlayedAt: '2026-08-02T21:30:00+08:00',
   },
   {
     id: 'girls-frontline',
@@ -90,6 +95,8 @@ export const mockGames: Game[] = [
     backgroundGradient: 'linear-gradient(125deg, #11131c, #3d4055)',
     coverGradient: 'linear-gradient(145deg, #eeeeee, #181818)',
     accent: '#f0c54f',
+    importedAt: '2026-07-15T10:00:00+08:00',
+    lastPlayedAt: '2026-08-04T23:08:00+08:00',
   },
   {
     id: 'blue-archive',
@@ -112,5 +119,6 @@ export const mockGames: Game[] = [
     backgroundGradient: 'linear-gradient(125deg, #1d4169, #7dc9eb)',
     coverGradient: 'linear-gradient(145deg, #bdeafa, #385e87)',
     accent: '#8ee5ff',
+    importedAt: '2026-07-21T10:00:00+08:00',
   },
 ]
