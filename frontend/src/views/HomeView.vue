@@ -5,7 +5,7 @@ import GameCard from '../components/GameCard.vue'
 import { playUiSound, unlockMediaAudio } from '../services/audioService'
 import { launchGame } from '../services/gameLauncher'
 import { registerLobbyGamepadInput } from '../services/inputService'
-import type { Game, QueueMode } from '../types/game'
+import type { Game } from '../types/game'
 import type { MainPage } from '../types/navigation'
 
 type MenuActionId = 'launch' | 'front' | 'reorder' | 'remove' | 'restore'
@@ -13,16 +13,12 @@ type MenuActionId = 'launch' | 'front' | 'reorder' | 'remove' | 'restore'
 const props = defineProps<{
   queue: Game[]
   selectedGame: Game | null
-  queueMode: QueueMode
   batteryLevel: number
-  sidebarOpen: boolean
 }>()
 
 const emit = defineEmits<{
   selectGame: [game: Game]
   notify: [message: string]
-  openMenu: []
-  closeMenu: []
   navigate: [page: MainPage]
   moveToFront: [gameId: string]
   commitReorder: [orderedIds: string[]]
@@ -36,12 +32,17 @@ const focusedActionIndex = ref(0)
 const confirmChoice = ref<0 | 1>(0)
 const actionButtons = ref<HTMLButtonElement[]>([])
 const confirmButtons = ref<HTMLButtonElement[]>([])
-const cardsContainer = ref<HTMLElement | null>(null)
+const cardsViewport = ref<HTMLElement | null>(null)
+const cardsTrack = ref<HTMLElement | null>(null)
+const trackOffset = ref(0)
 const reorderGameId = ref<string | null>(null)
 const reorderDraft = ref<Game[]>([])
 const reorderOriginalIds = ref<string[]>([])
-const dropCommitted = ref(false)
+const pointerDragGameId = ref<string | null>(null)
+const pointerDragId = ref<number | null>(null)
+const pointerDragMoved = ref(false)
 let unregisterGamepadInput: () => void = () => undefined
+let trackResizeObserver: ResizeObserver | undefined
 
 const isReordering = computed(() => reorderGameId.value !== null)
 const displayQueue = computed(() => isReordering.value ? reorderDraft.value : props.queue)
@@ -70,11 +71,6 @@ function setConfirmButton(element: unknown, index: number) {
   if (element instanceof HTMLButtonElement) confirmButtons.value[index] = element
 }
 
-function requestOpenSidebar() {
-  playUiSound('open')
-  emit('openMenu')
-}
-
 function navigate(page: MainPage) {
   playUiSound('confirm')
   emit('navigate', page)
@@ -99,6 +95,15 @@ function selectAdjacent(direction: -1 | 1) {
   if (!nextGame || nextGame.id === props.selectedGame.id) return
   playUiSound('select')
   emit('selectGame', nextGame)
+  focusGameCard(nextGame.id)
+}
+
+function focusGameCard(gameId: string) {
+  nextTick(() => {
+    cardsTrack.value
+      ?.querySelector<HTMLElement>(`[data-game-id="${gameId}"]`)
+      ?.focus({ preventScroll: true })
+  })
 }
 
 function openActionMenu() {
@@ -158,7 +163,6 @@ function beginReorder(game: Game) {
   reorderOriginalIds.value = props.queue.map((item) => item.id)
   reorderDraft.value = [...props.queue]
   reorderGameId.value = game.id
-  dropCommitted.value = false
   actionMenuOpen.value = false
 }
 
@@ -198,37 +202,47 @@ function clearReorderState() {
   reorderGameId.value = null
   reorderDraft.value = []
   reorderOriginalIds.value = []
+  pointerDragGameId.value = null
+  pointerDragId.value = null
+  pointerDragMoved.value = false
 }
 
-function handleDragStart(game: Game, event: DragEvent) {
-  if (game.id !== reorderGameId.value) {
-    event.preventDefault()
-    return
-  }
-  dropCommitted.value = false
-  if (event.dataTransfer) {
-    event.dataTransfer.effectAllowed = 'move'
-    event.dataTransfer.setData('text/plain', game.id)
-  }
+function handlePointerDown(game: Game, event: PointerEvent) {
+  if (game.id !== reorderGameId.value || event.button !== 0) return
+  pointerDragGameId.value = game.id
+  pointerDragId.value = event.pointerId
+  pointerDragMoved.value = false
 }
 
-function handleDragOver(game: Game, event: DragEvent) {
-  if (!reorderGameId.value) return
-  event.preventDefault()
-  const fromIndex = reorderDraft.value.findIndex((item) => item.id === reorderGameId.value)
-  const toIndex = reorderDraft.value.findIndex((item) => item.id === game.id)
-  if (fromIndex >= 0 && toIndex >= 0 && fromIndex !== toIndex) moveDraftItem(fromIndex, toIndex)
+function handlePointerMove(event: PointerEvent) {
+  if (pointerDragId.value !== event.pointerId || !pointerDragGameId.value) return
+  const targetCard = document
+    .elementFromPoint(event.clientX, event.clientY)
+    ?.closest<HTMLElement>('.game-card--rail')
+  const targetId = targetCard?.dataset.gameId
+  if (!targetId || targetId === pointerDragGameId.value) return
+  const fromIndex = reorderDraft.value.findIndex((item) => item.id === pointerDragGameId.value)
+  const toIndex = reorderDraft.value.findIndex((item) => item.id === targetId)
+  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return
+  moveDraftItem(fromIndex, toIndex)
+  pointerDragMoved.value = true
 }
 
-function handleDrop(_game: Game, event: DragEvent) {
-  if (!isReordering.value) return
-  event.preventDefault()
-  dropCommitted.value = true
-  confirmReorder()
+function handlePointerUp(event: PointerEvent) {
+  if (pointerDragId.value !== event.pointerId) return
+  const shouldCommit = pointerDragMoved.value
+  pointerDragGameId.value = null
+  pointerDragId.value = null
+  pointerDragMoved.value = false
+  if (shouldCommit) confirmReorder()
 }
 
-function handleDragEnd() {
-  if (isReordering.value && !dropCommitted.value) cancelReorder()
+function handlePointerCancel(event: PointerEvent) {
+  if (pointerDragId.value !== event.pointerId) return
+  pointerDragGameId.value = null
+  pointerDragId.value = null
+  pointerDragMoved.value = false
+  cancelReorder()
 }
 
 function openRestoreConfirmation() {
@@ -253,16 +267,12 @@ function confirmRestore() {
 
 function handleKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape') {
-    event.preventDefault()
+    if (isReordering.value || confirmRestoreOpen.value || actionMenuOpen.value) event.preventDefault()
     if (isReordering.value) cancelReorder()
     else if (confirmRestoreOpen.value) closeRestoreConfirmation()
     else if (actionMenuOpen.value) closeActionMenu()
-    else if (props.sidebarOpen) emit('closeMenu')
-    else requestOpenSidebar()
     return
   }
-
-  if (props.sidebarOpen) return
 
   if (actionMenuOpen.value && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
     event.preventDefault()
@@ -298,33 +308,50 @@ function handleKeydown(event: KeyboardEvent) {
   else if (!actionMenuOpen.value && !confirmRestoreOpen.value) selectAdjacent(direction)
 }
 
-function scrollSelectedIntoView() {
+function updateTrackPosition() {
   const selectedId = props.selectedGame?.id
-  if (!selectedId || !cardsContainer.value) return
+  if (!selectedId || !cardsViewport.value || !cardsTrack.value) return
   nextTick(() => {
-    const card = cardsContainer.value?.querySelector<HTMLElement>(`[data-game-id="${selectedId}"]`)
-    card?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+    const viewport = cardsViewport.value
+    const track = cardsTrack.value
+    const card = track?.querySelector<HTMLElement>(`[data-game-id="${selectedId}"]`)
+    if (!viewport || !track || !card) return
+
+    const focusPoint = viewport.clientWidth * .36
+    const desiredOffset = focusPoint - (card.offsetLeft + card.offsetWidth / 2)
+    const minimumOffset = Math.min(0, viewport.clientWidth - track.scrollWidth)
+    trackOffset.value = Math.round(Math.min(0, Math.max(minimumOffset, desiredOffset)))
   })
 }
 
-watch(() => props.selectedGame?.id, scrollSelectedIntoView)
-watch(() => props.queue.map((game) => game.id).join('|'), scrollSelectedIntoView)
+watch(() => props.selectedGame?.id, updateTrackPosition)
+watch(() => displayQueue.value.map((game) => game.id).join('|'), updateTrackPosition)
 
 onMounted(() => {
   window.addEventListener('keydown', handleKeydown)
+  window.addEventListener('pointermove', handlePointerMove)
+  window.addEventListener('pointerup', handlePointerUp)
+  window.addEventListener('pointercancel', handlePointerCancel)
   unregisterGamepadInput = registerLobbyGamepadInput({
     moveLeft: () => isReordering.value ? moveReorderingGame(-1) : selectAdjacent(-1),
     moveRight: () => isReordering.value ? moveReorderingGame(1) : selectAdjacent(1),
     confirm: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' })),
     cancel: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })),
-    openMenu: requestOpenSidebar,
+    openMenu: openActionMenu,
   })
-  scrollSelectedIntoView()
+  trackResizeObserver = new ResizeObserver(updateTrackPosition)
+  if (cardsViewport.value) trackResizeObserver.observe(cardsViewport.value)
+  if (cardsTrack.value) trackResizeObserver.observe(cardsTrack.value)
+  updateTrackPosition()
 })
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown)
+  window.removeEventListener('pointermove', handlePointerMove)
+  window.removeEventListener('pointerup', handlePointerUp)
+  window.removeEventListener('pointercancel', handlePointerCancel)
   unregisterGamepadInput()
+  trackResizeObserver?.disconnect()
 })
 </script>
 
@@ -355,19 +382,6 @@ onUnmounted(() => {
 
     <DeviceStatus :battery-level="batteryLevel" />
 
-    <nav class="home-rail" aria-label="大厅快捷导航">
-      <button class="home-rail__menu" aria-label="展开主菜单" @click="requestOpenSidebar">
-        <span class="home-rail__menu-lines"><i></i><i></i><i></i></span><strong>levaBox</strong>
-      </button>
-      <div class="home-rail__divider"></div>
-      <button class="home-rail__item home-rail__item--active" @click="navigate('home')"><span>⌂</span><strong>大厅</strong></button>
-      <button class="home-rail__item" @click="navigate('library')"><span>▦</span><strong>游戏库</strong></button>
-      <button class="home-rail__item" @click="$emit('notify', '收藏筛选可在游戏库中查看')"><span>♥</span><strong>收藏</strong></button>
-      <button class="home-rail__item" @click="$emit('notify', '最近游玩记录将在后续阶段接入')"><span>◷</span><strong>最近游玩</strong></button>
-      <button class="home-rail__item" @click="navigate('import')"><span>＋</span><strong>导入游戏</strong></button>
-      <button class="home-rail__item home-rail__item--bottom" @click="navigate('settings')"><span>⚙</span><strong>设置</strong></button>
-    </nav>
-
     <Transition name="hero" mode="out-in">
       <article v-if="selectedGame" :key="selectedGame.id" class="home__info">
         <img v-if="selectedGame.logo" class="home__logo" :src="selectedGame.logo" :alt="selectedGame.title" />
@@ -382,26 +396,25 @@ onUnmounted(() => {
 
     <section v-if="queue.length" class="home__carousel" aria-label="游戏队列">
       <header class="home__carousel-header">
-        <div><span></span><strong>游戏队列</strong><small>{{ queueMode === 'custom' ? '自定义顺序' : '默认顺序' }}</small></div>
+        <div><span></span><strong>游戏队列</strong></div>
         <p v-if="isReordering">← / → 调整位置　Enter 确认　Esc 取消</p>
       </header>
-      <div ref="cardsContainer" class="home__cards">
-        <TransitionGroup name="queue">
-          <GameCard
-            v-for="game in displayQueue"
-            :key="game.id"
-            :game="game"
-            variant="rail"
-            :selected="game.id === selectedGame?.id"
-            :reordering="isReordering"
-            :moving="game.id === reorderGameId"
-            @select="handleGameClick"
-            @drag-start="handleDragStart"
-            @drag-over="handleDragOver"
-            @drop="handleDrop"
-            @drag-end="handleDragEnd"
-          />
-        </TransitionGroup>
+      <div ref="cardsViewport" class="home__cards-viewport">
+        <div ref="cardsTrack" class="home__cards-track" :style="{ transform: `translate3d(${trackOffset}px, 0, 0)` }">
+          <TransitionGroup name="queue">
+            <GameCard
+              v-for="game in displayQueue"
+              :key="game.id"
+              :game="game"
+              variant="rail"
+              :selected="game.id === selectedGame?.id"
+              :reordering="isReordering"
+              :moving="game.id === reorderGameId"
+              @select="handleGameClick"
+              @pointer-down="handlePointerDown"
+            />
+          </TransitionGroup>
+        </div>
       </div>
     </section>
 
@@ -445,52 +458,44 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.home { position: relative; height: 100%; min-height: 0; overflow: hidden; background: radial-gradient(circle at 70% 20%, #182438, #070b12 64%); }
+.home {
+  --home-content-left: clamp(88px, 6vw, 150px);
+  --rail-card-width: clamp(170px, min(13.75vw, 24.5vh, calc(8.333vh + 160px)), 290px);
+  --rail-card-gap: clamp(10px, .75vw, 16px);
+  --rail-selected-scale: 1.08;
+  --rail-selected-lift: clamp(16px, 2vh, 22px);
+  --rail-reorder-lift: clamp(27px, 3.2vh, 35px);
+  --rail-bottom-space: clamp(10px, 2vh, 24px);
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: radial-gradient(circle at 70% 20%, #182438, #070b12 64%);
+}
 .home__media, .home__backdrop, .home__shade { position: absolute; inset: 0; }
 .home__media { transition: filter 180ms ease, transform 180ms ease; }
 .home__backdrop { width: 100%; height: 100%; object-fit: cover; }
-.home__shade { background: linear-gradient(90deg, rgba(3, 7, 13, .82) 0%, rgba(3, 7, 13, .4) 29%, rgba(3, 7, 13, .05) 68%), linear-gradient(0deg, rgba(3, 7, 13, .93) 0%, rgba(3, 7, 13, .36) 27%, transparent 57%), linear-gradient(180deg, rgba(3, 7, 13, .25), transparent 20%); transition: background 180ms ease; }
+.home__shade { background: linear-gradient(90deg, rgba(3, 7, 13, .78) 0%, rgba(3, 7, 13, .36) 30%, rgba(3, 7, 13, .04) 70%), linear-gradient(0deg, rgba(3, 7, 13, .94) 0%, rgba(3, 7, 13, .48) 39%, transparent 66%), linear-gradient(180deg, rgba(3, 7, 13, .23), transparent 20%); transition: background 180ms ease; }
 .home--modal-open .home__media { filter: blur(6px) brightness(.66); transform: scale(1.015); }
 .home--modal-open .home__shade { background: rgba(3, 7, 13, .44); }
 
-.home-rail { position: absolute; z-index: 10; inset: 0 auto 0 0; display: flex; flex-direction: column; width: 64px; padding: 18px 7px; overflow: hidden; border: 0; background: transparent; transition: width 180ms ease, background 180ms ease, box-shadow 180ms ease, backdrop-filter 180ms ease; }
-.home-rail:hover, .home-rail:focus-within { width: 184px; background: rgba(5, 10, 18, .82); box-shadow: 18px 0 50px rgba(0, 0, 0, .28); backdrop-filter: blur(18px); }
-.home-rail button { display: flex; align-items: center; flex: 0 0 auto; width: 168px; height: 44px; padding: 0; border: 0; border-radius: 11px; color: #d6dee8; background: transparent; opacity: .42; cursor: pointer; transition: opacity 140ms ease, background 140ms ease; }
-.home-rail button:hover, .home-rail button:focus-visible { color: #fff; opacity: 1; outline: none; background: rgba(255, 255, 255, .08); }
-.home-rail__menu { opacity: .62 !important; }
-.home-rail__menu-lines, .home-rail__item > span { display: grid; place-items: center; flex: 0 0 48px; width: 48px; }
-.home-rail__menu-lines { gap: 4px; }
-.home-rail__menu-lines i { display: block; width: 17px; height: 2px; border-radius: 9px; background: currentColor; }
-.home-rail strong { opacity: 0; white-space: nowrap; transition: opacity 100ms ease 30ms; }
-.home-rail:hover strong, .home-rail:focus-within strong { opacity: 1; }
-.home-rail__menu strong { font-size: .82rem; letter-spacing: .05em; }
-.home-rail__divider { height: 1px; margin: 7px 8px 9px; background: transparent; transition: background 180ms ease; }
-.home-rail:hover .home-rail__divider, .home-rail:focus-within .home-rail__divider { background: rgba(255, 255, 255, .09); }
-.home-rail__item { margin-bottom: 4px; font-size: .78rem; text-align: left; }
-.home-rail__item > span { font-size: 1.18rem; }
-.home-rail__item--active { color: #fff !important; opacity: .82 !important; }
-.home-rail:hover .home-rail__item--active, .home-rail:focus-within .home-rail__item--active { background: linear-gradient(90deg, rgba(91, 206, 255, .18), rgba(91, 206, 255, .03)); }
-.home-rail__item--active::before { content: ''; position: absolute; left: 0; width: 3px; height: 22px; border-radius: 99px; background: #72dfff; box-shadow: 0 0 10px #72dfff; }
-.home-rail__item--bottom { margin-top: auto; }
-
-.home__info { position: absolute; z-index: 3; left: clamp(88px, 8.2vw, 150px); bottom: clamp(196px, 28vh, 248px); width: min(540px, 50vw); text-shadow: 0 3px 18px rgba(0, 0, 0, .72); }
+.home__info { position: absolute; z-index: 3; top: clamp(84px, 13.5vh, 160px); left: var(--home-content-left); width: min(560px, 52vw); text-shadow: 0 3px 18px rgba(0, 0, 0, .72); }
 .home__info h1 { margin: 0; max-width: 540px; font-size: clamp(2.4rem, 4.5vw, 5.1rem); line-height: 1.02; letter-spacing: -.06em; }
-.home__logo { display: block; max-width: min(430px, 38vw); max-height: 112px; object-fit: contain; object-position: left center; }
+.home__logo { display: block; max-width: min(450px, 40vw); max-height: clamp(82px, 10.5vh, 128px); object-fit: contain; object-position: left center; }
 .home__company { margin: 10px 0 13px; color: rgba(255, 255, 255, .74); font-size: .77rem; letter-spacing: .04em; }
 .home__details { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
 .home__tag, .home__status { padding: 5px 9px; border: 1px solid rgba(255, 255, 255, .15); border-radius: 999px; color: rgba(255, 255, 255, .78); background: rgba(4, 9, 17, .2); font-size: .66rem; backdrop-filter: blur(6px); }
 .home__status { display: flex; align-items: center; gap: 6px; margin-left: 2px; color: #fff; }
 .home__status i { width: 5px; height: 5px; border-radius: 50%; background: #74e2ff; box-shadow: 0 0 8px #74e2ff; }
 
-.home__carousel { position: absolute; z-index: 4; right: 0; bottom: 0; left: 0; padding: 0 0 7px 76px; }
-.home__carousel-header { display: flex; align-items: end; justify-content: space-between; min-height: 24px; padding: 0 32px 7px 12px; }
+.home__carousel { position: absolute; z-index: 4; right: 0; bottom: 0; left: 0; padding: 0 0 var(--rail-bottom-space) var(--home-content-left); }
+.home__carousel-header { display: flex; align-items: end; justify-content: space-between; width: min(calc(100vw - var(--home-content-left)), clamp(700px, 52vw, 1280px)); min-height: 24px; padding: 0 8px 4px; }
 .home__carousel-header div { display: flex; align-items: center; gap: 9px; }
-.home__carousel-header div > span { width: 3px; height: 18px; border-radius: 9px; background: #70ddff; box-shadow: 0 0 10px #70ddff; }
-.home__carousel-header strong { font-size: .86rem; }
-.home__carousel-header small { color: rgba(255, 255, 255, .48); font-size: .62rem; }
-.home__carousel-header p { margin: 0; color: rgba(255, 255, 255, .68); font-size: .66rem; }
-.home__cards { display: flex; gap: clamp(10px, 1.15vw, 18px); padding: 19px clamp(90px, 9vw, 150px) 3px 9px; overflow-x: auto; overflow-y: hidden; scroll-behavior: smooth; scrollbar-width: none; mask-image: linear-gradient(90deg, transparent 0, #000 2%, #000 94%, transparent 100%); }
-.home__cards::-webkit-scrollbar { display: none; }
+.home__carousel-header div > span { width: 2px; height: 15px; border-radius: 2px; background: rgba(191, 235, 249, .82); }
+.home__carousel-header strong { color: rgba(255, 255, 255, .72); font-size: clamp(.72rem, .7vw, .88rem); font-weight: 600; letter-spacing: .04em; }
+.home__carousel-header p { margin: 0; color: rgba(255, 255, 255, .62); font-size: clamp(.61rem, .58vw, .72rem); }
+.home__cards-viewport { width: min(calc(100vw - var(--home-content-left)), clamp(700px, 52vw, 1280px)); overflow: hidden; mask-image: linear-gradient(90deg, #000 0%, #000 95%, transparent 100%); }
+.home__cards-track { display: flex; gap: var(--rail-card-gap); width: max-content; padding: calc(var(--rail-reorder-lift) + 18px) 24px 8px 8px; transition: transform 270ms cubic-bezier(.22, .72, .24, 1); will-change: transform; }
 .queue-move { transition: transform 230ms ease; }
 
 .home__empty { position: absolute; z-index: 4; top: 50%; left: 50%; display: grid; justify-items: center; transform: translate(-50%, -50%); color: rgba(255, 255, 255, .72); text-align: center; }
@@ -527,15 +532,43 @@ onUnmounted(() => {
 .dialog-fade-enter-from, .dialog-fade-leave-to { opacity: 0; }
 
 @media (max-width: 1100px) {
-  .home__info { left: 84px; bottom: 206px; width: 54vw; }
+  .home { --home-content-left: 72px; }
+  .home__info { width: 58vw; }
   .home__info h1 { font-size: clamp(2.2rem, 4.6vw, 3.8rem); }
-  .home__carousel { padding-left: 68px; }
 }
 
-@media (max-height: 700px) {
-  .home__info { bottom: 184px; }
+@media (max-width: 1300px) and (min-height: 780px) and (min-aspect-ratio: 3 / 2) {
+  .home { --rail-card-width: clamp(185px, 23.75vh, 195px); }
+}
+
+@media (min-width: 2300px) and (min-height: 1300px) {
+  .home {
+    --rail-card-gap: 18px;
+    --rail-selected-lift: 26px;
+    --rail-reorder-lift: 40px;
+    --rail-bottom-space: 30px;
+  }
+  .home__info { top: clamp(180px, 13.5vh, 220px); width: 650px; }
+  .home__logo { max-width: 540px; max-height: 150px; }
+  .home__company { font-size: .9rem; }
+  .home__tag, .home__status { font-size: .76rem; }
+}
+
+@media (max-height: 760px) {
+  .home {
+    --rail-bottom-space: 8px;
+    --rail-selected-lift: 16px;
+    --rail-reorder-lift: 27px;
+  }
+  .home__info { top: 72px; }
   .home__info h1 { font-size: clamp(2.1rem, 4vw, 3.7rem); }
+  .home__logo { max-height: 78px; }
   .home__company { margin: 7px 0 9px; }
-  .home__cards { padding-top: 15px; }
+  .home__cards-track { padding-top: calc(var(--rail-reorder-lift) + 12px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home__cards-track,
+  .queue-move { transition-duration: 1ms; }
 }
 </style>

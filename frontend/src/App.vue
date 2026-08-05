@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
-import SidebarMenu from './components/SidebarMenu.vue'
+import { computed, onMounted, ref } from 'vue'
+import GlobalNavigation from './components/GlobalNavigation.vue'
 import { mockGames } from './data/mockGames'
 import GameDetailView from './views/GameDetailView.vue'
 import HomeView from './views/HomeView.vue'
@@ -18,7 +18,6 @@ const homeQueue = ref<Game[]>(sortByDefaultRule(mockGames))
 const selectedHomeGameId = ref<string | null>(homeQueue.value[0]?.id ?? null)
 const detailGame = ref<Game | null>(null)
 const queueMode = ref<QueueMode>('default')
-const menuOpen = ref(false)
 const batteryLevel = ref(78)
 const toastMessage = ref('')
 let toastTimer: ReturnType<typeof setTimeout> | undefined
@@ -31,7 +30,6 @@ const selectedHomeGame = computed<Game | null>(() => {
 function navigate(page: MainPage) {
   currentPage.value = page
   previousPage.value = page
-  menuOpen.value = false
   if (page === 'home' && !selectedHomeGame.value) {
     selectedHomeGameId.value = homeQueue.value[0]?.id ?? null
   }
@@ -47,7 +45,6 @@ function openDetail(game: Game) {
   detailGame.value = game
   if (currentPage.value !== 'detail') previousPage.value = currentPage.value
   currentPage.value = 'detail'
-  menuOpen.value = false
 }
 
 function returnFromDetail() {
@@ -123,43 +120,22 @@ function notify(message: string) {
   toastTimer = setTimeout(() => { toastMessage.value = '' }, 2600)
 }
 
-function handleAppKeydown(event: KeyboardEvent) {
-  if (currentPage.value === 'home') return
-  if (event.key === 'Escape' && menuOpen.value) {
-    event.preventDefault()
-    menuOpen.value = false
-  }
-}
-
 onMounted(async () => {
-  window.addEventListener('keydown', handleAppKeydown)
   batteryLevel.value = await getBatteryLevel()
-})
-
-onUnmounted(() => {
-  window.removeEventListener('keydown', handleAppKeydown)
 })
 </script>
 
 <template>
   <div class="app-shell">
-    <button v-if="currentPage !== 'home'" class="menu-trigger" :class="{ 'menu-trigger--hidden': menuOpen }" aria-label="打开菜单" @click="menuOpen = true">
-      <span></span><span></span><span></span>
-    </button>
-
-    <SidebarMenu :open="menuOpen" :current-page="activeMainPage" @close="menuOpen = false" @navigate="navigate" />
+    <GlobalNavigation :current-page="activeMainPage" @navigate="navigate" />
 
     <HomeView
       v-if="currentPage === 'home'"
       :queue="homeQueue"
       :selected-game="selectedHomeGame"
-      :queue-mode="queueMode"
       :battery-level="batteryLevel"
-      :sidebar-open="menuOpen"
       @select-game="selectGame"
       @notify="notify"
-      @open-menu="menuOpen = true"
-      @close-menu="menuOpen = false"
       @navigate="navigate"
       @move-to-front="moveGameToFront"
       @commit-reorder="commitQueueOrder"
