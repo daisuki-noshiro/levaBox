@@ -317,10 +317,23 @@ function updateTrackPosition() {
     const card = track?.querySelector<HTMLElement>(`[data-game-id="${selectedId}"]`)
     if (!viewport || !track || !card) return
 
-    const focusPoint = viewport.clientWidth * .36
-    const desiredOffset = focusPoint - (card.offsetLeft + card.offsetWidth / 2)
-    const minimumOffset = Math.min(0, viewport.clientWidth - track.scrollWidth)
-    trackOffset.value = Math.round(Math.min(0, Math.max(minimumOffset, desiredOffset)))
+    const focusRatio = Number.parseFloat(
+      getComputedStyle(viewport).getPropertyValue('--rail-focus-ratio'),
+    ) || .28
+    const focusPoint = viewport.clientWidth * focusRatio
+    const leadingSpace = Math.max(0, focusPoint - card.offsetWidth / 2)
+    const trailingSpace = Math.max(0, viewport.clientWidth - focusPoint - card.offsetWidth / 2)
+    const leadingValue = `${Math.round(leadingSpace)}px`
+    const trailingValue = `${Math.round(trailingSpace)}px`
+
+    if (track.style.getPropertyValue('--rail-leading-space') !== leadingValue) {
+      track.style.setProperty('--rail-leading-space', leadingValue)
+    }
+    if (track.style.getPropertyValue('--rail-trailing-space') !== trailingValue) {
+      track.style.setProperty('--rail-trailing-space', trailingValue)
+    }
+
+    trackOffset.value = Math.round(focusPoint - (card.offsetLeft + card.offsetWidth / 2))
   })
 }
 
@@ -382,41 +395,43 @@ onUnmounted(() => {
 
     <DeviceStatus :battery-level="batteryLevel" />
 
-    <Transition name="hero" mode="out-in">
-      <article v-if="selectedGame" :key="selectedGame.id" class="home__info">
-        <img v-if="selectedGame.logo" class="home__logo" :src="selectedGame.logo" :alt="selectedGame.title" />
-        <h1 v-else>{{ selectedGame.title }}</h1>
-        <p class="home__company">{{ selectedGame.developer }} · {{ selectedGame.year }}</p>
-        <div class="home__details">
-          <span v-for="genre in selectedGame.genres" :key="genre" class="home__tag">{{ genre }}</span>
-          <span class="home__status"><i></i>{{ selectedGame.status }}</span>
-        </div>
-      </article>
-    </Transition>
+    <div v-if="queue.length" class="home__lower-content">
+      <Transition name="hero" mode="out-in">
+        <article v-if="selectedGame" :key="selectedGame.id" class="home__info">
+          <img v-if="selectedGame.logo" class="home__logo" :src="selectedGame.logo" :alt="selectedGame.title" />
+          <h1 v-else>{{ selectedGame.title }}</h1>
+          <p class="home__company">{{ selectedGame.developer }} · {{ selectedGame.year }}</p>
+          <div class="home__details">
+            <span v-for="genre in selectedGame.genres" :key="genre" class="home__tag">{{ genre }}</span>
+            <span class="home__status"><i></i>{{ selectedGame.status }}</span>
+          </div>
+        </article>
+      </Transition>
 
-    <section v-if="queue.length" class="home__carousel" aria-label="游戏队列">
-      <header class="home__carousel-header">
-        <div><span></span><strong>游戏队列</strong></div>
-        <p v-if="isReordering">← / → 调整位置　Enter 确认　Esc 取消</p>
-      </header>
-      <div ref="cardsViewport" class="home__cards-viewport">
-        <div ref="cardsTrack" class="home__cards-track" :style="{ transform: `translate3d(${trackOffset}px, 0, 0)` }">
-          <TransitionGroup name="queue">
-            <GameCard
-              v-for="game in displayQueue"
-              :key="game.id"
-              :game="game"
-              variant="rail"
-              :selected="game.id === selectedGame?.id"
-              :reordering="isReordering"
-              :moving="game.id === reorderGameId"
-              @select="handleGameClick"
-              @pointer-down="handlePointerDown"
-            />
-          </TransitionGroup>
+      <section class="home__carousel" aria-label="游戏队列">
+        <header class="home__carousel-header">
+          <div><span></span><strong>游戏队列</strong></div>
+          <p v-if="isReordering">← / → 调整位置　Enter 确认　Esc 取消</p>
+        </header>
+        <div ref="cardsViewport" class="home__cards-viewport">
+          <div ref="cardsTrack" class="home__cards-track" :style="{ transform: `translate3d(${trackOffset}px, 0, 0)` }">
+            <TransitionGroup name="queue">
+              <GameCard
+                v-for="game in displayQueue"
+                :key="game.id"
+                :game="game"
+                variant="rail"
+                :selected="game.id === selectedGame?.id"
+                :reordering="isReordering"
+                :moving="game.id === reorderGameId"
+                @select="handleGameClick"
+                @pointer-down="handlePointerDown"
+              />
+            </TransitionGroup>
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
+    </div>
 
     <section v-else class="home__empty">
       <span>＋</span><h1>游戏队列为空</h1><p>游戏资料仍保留在游戏库中。</p>
@@ -466,6 +481,9 @@ onUnmounted(() => {
   --rail-selected-lift: clamp(16px, 2vh, 22px);
   --rail-reorder-lift: clamp(27px, 3.2vh, 35px);
   --rail-bottom-space: clamp(10px, 2vh, 24px);
+  --rail-focus-ratio: .28;
+  --rail-edge-fade: clamp(16px, 1.8vw, 36px);
+  --home-info-queue-gap: clamp(12px, 1.5vh, 22px);
   position: relative;
   height: 100%;
   min-height: 0;
@@ -479,7 +497,8 @@ onUnmounted(() => {
 .home--modal-open .home__media { filter: blur(6px) brightness(.66); transform: scale(1.015); }
 .home--modal-open .home__shade { background: rgba(3, 7, 13, .44); }
 
-.home__info { position: absolute; z-index: 3; top: clamp(84px, 13.5vh, 160px); left: var(--home-content-left); width: min(560px, 52vw); text-shadow: 0 3px 18px rgba(0, 0, 0, .72); }
+.home__lower-content { position: absolute; z-index: 4; right: 0; bottom: 0; left: 0; display: grid; gap: var(--home-info-queue-gap); padding-bottom: var(--rail-bottom-space); }
+.home__info { position: relative; z-index: 3; width: min(560px, 52vw); margin-left: var(--home-content-left); text-shadow: 0 3px 18px rgba(0, 0, 0, .72); }
 .home__info h1 { margin: 0; max-width: 540px; font-size: clamp(2.4rem, 4.5vw, 5.1rem); line-height: 1.02; letter-spacing: -.06em; }
 .home__logo { display: block; max-width: min(450px, 40vw); max-height: clamp(82px, 10.5vh, 128px); object-fit: contain; object-position: left center; }
 .home__company { margin: 10px 0 13px; color: rgba(255, 255, 255, .74); font-size: .77rem; letter-spacing: .04em; }
@@ -488,14 +507,14 @@ onUnmounted(() => {
 .home__status { display: flex; align-items: center; gap: 6px; margin-left: 2px; color: #fff; }
 .home__status i { width: 5px; height: 5px; border-radius: 50%; background: #74e2ff; box-shadow: 0 0 8px #74e2ff; }
 
-.home__carousel { position: absolute; z-index: 4; right: 0; bottom: 0; left: 0; padding: 0 0 var(--rail-bottom-space) var(--home-content-left); }
-.home__carousel-header { display: flex; align-items: end; justify-content: space-between; width: min(calc(100vw - var(--home-content-left)), clamp(700px, 52vw, 1280px)); min-height: 24px; padding: 0 8px 4px; }
+.home__carousel { min-width: 0; }
+.home__carousel-header { display: flex; align-items: end; justify-content: space-between; width: calc(100% - var(--home-content-left) - clamp(20px, 2.2vw, 46px)); min-height: 24px; margin-left: var(--home-content-left); padding: 0 8px 4px; }
 .home__carousel-header div { display: flex; align-items: center; gap: 9px; }
 .home__carousel-header div > span { width: 2px; height: 15px; border-radius: 2px; background: rgba(191, 235, 249, .82); }
 .home__carousel-header strong { color: rgba(255, 255, 255, .72); font-size: clamp(.72rem, .7vw, .88rem); font-weight: 600; letter-spacing: .04em; }
 .home__carousel-header p { margin: 0; color: rgba(255, 255, 255, .62); font-size: clamp(.61rem, .58vw, .72rem); }
-.home__cards-viewport { width: min(calc(100vw - var(--home-content-left)), clamp(700px, 52vw, 1280px)); overflow: hidden; mask-image: linear-gradient(90deg, #000 0%, #000 95%, transparent 100%); }
-.home__cards-track { display: flex; gap: var(--rail-card-gap); width: max-content; padding: calc(var(--rail-reorder-lift) + 18px) 24px 8px 8px; transition: transform 270ms cubic-bezier(.22, .72, .24, 1); will-change: transform; }
+.home__cards-viewport { width: 100%; overflow: hidden; mask-image: linear-gradient(90deg, transparent 0, #000 var(--rail-edge-fade), #000 calc(100% - var(--rail-edge-fade)), transparent 100%); }
+.home__cards-track { display: flex; gap: var(--rail-card-gap); width: max-content; padding: calc(var(--rail-reorder-lift) + 18px) var(--rail-trailing-space, 24px) 8px var(--rail-leading-space, 8px); transition: transform 270ms cubic-bezier(.22, .72, .24, 1); will-change: transform; }
 .queue-move { transition: transform 230ms ease; }
 
 .home__empty { position: absolute; z-index: 4; top: 50%; left: 50%; display: grid; justify-items: center; transform: translate(-50%, -50%); color: rgba(255, 255, 255, .72); text-align: center; }
@@ -548,7 +567,7 @@ onUnmounted(() => {
     --rail-reorder-lift: 40px;
     --rail-bottom-space: 30px;
   }
-  .home__info { top: clamp(180px, 13.5vh, 220px); width: 650px; }
+  .home__info { width: 650px; }
   .home__logo { max-width: 540px; max-height: 150px; }
   .home__company { font-size: .9rem; }
   .home__tag, .home__status { font-size: .76rem; }
@@ -560,7 +579,6 @@ onUnmounted(() => {
     --rail-selected-lift: 16px;
     --rail-reorder-lift: 27px;
   }
-  .home__info { top: 72px; }
   .home__info h1 { font-size: clamp(2.1rem, 4vw, 3.7rem); }
   .home__logo { max-height: 78px; }
   .home__company { margin: 7px 0 9px; }
