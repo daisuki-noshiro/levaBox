@@ -52,7 +52,7 @@ onMounted(async () => {
         </div>
         <label class="volume-row">
           <div><strong>音乐音量</strong><span>{{ settingsState.musicVolume }}%</span></div>
-          <input v-model="settingsState.musicVolume" type="range" min="0" max="100" aria-label="音乐音量" />
+          <input v-model.number="settingsState.musicVolume" type="range" min="0" max="100" aria-label="音乐音量" />
         </label>
       </section>
 

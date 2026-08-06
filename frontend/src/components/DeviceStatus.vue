@@ -48,12 +48,12 @@ onUnmounted(() => {
   text-shadow: 0 2px 12px rgba(0, 0, 0, .7);
 }
 
-.device-status time { color: #fff; font-size: clamp(.78rem, .76cqw, .96rem); font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.device-status time { color: #fff; font-size: clamp(.8rem, .76cqw, .96rem); font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
 .battery-status { display: flex; align-items: center; gap: clamp(7px, .5cqw, 10px); }
 .battery-status__shell { display: block; width: clamp(24px, 1.55cqw, 31px); height: clamp(12px, .78cqw, 16px); padding: 2px; border: 1px solid rgba(255, 255, 255, .72); border-radius: 3px; }
 .battery-status__fill { display: block; height: 100%; min-width: 1px; border-radius: 1px; background: rgba(255, 255, 255, .82); }
 .battery-status__terminal { width: 3px; height: clamp(6px, .4cqw, 8px); margin-left: calc(clamp(7px, .5cqw, 10px) * -1 - 1px); border-radius: 0 2px 2px 0; background: rgba(255, 255, 255, .7); }
-.battery-status b { min-width: 34px; color: #fff; font-size: clamp(.72rem, .72cqw, .9rem); font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: .01em; }
+.battery-status b { min-width: 36px; color: #fff; font-size: clamp(.78rem, .72cqw, .9rem); font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: .01em; }
 
 @container levabox-app (max-width: 1100px) {
   .device-status { top: 17px; left: 18px; }

@@ -530,9 +530,9 @@ onUnmounted(() => {
 .home__info { position: relative; z-index: 3; width: min(560px, 52cqw); margin-left: var(--home-content-left); text-shadow: 0 3px 18px rgba(0, 0, 0, .72); }
 .home__info h1 { margin: 0; max-width: 540px; font-size: clamp(2.4rem, 4.5cqw, 5.1rem); line-height: 1.02; letter-spacing: -.06em; }
 .home__logo { display: block; max-width: min(450px, 40cqw); max-height: clamp(82px, 10.5cqh, 128px); object-fit: contain; object-position: left center; }
-.home__company { margin: 10px 0 13px; color: rgba(255, 255, 255, .74); font-size: .77rem; letter-spacing: .04em; }
+.home__company { margin: 10px 0 13px; color: rgba(255, 255, 255, .86); font-size: .8rem; font-weight: 600; letter-spacing: .04em; text-shadow: 0 1px 3px rgba(0, 0, 0, .9); }
 .home__details { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
-.home__tag, .home__status { padding: 5px 9px; border: 1px solid rgba(255, 255, 255, .15); border-radius: 999px; color: rgba(255, 255, 255, .78); background: rgba(4, 9, 17, .2); font-size: .66rem; backdrop-filter: blur(6px); }
+.home__tag, .home__status { padding: 6px 11px; border: 1px solid rgba(255, 255, 255, .28); border-radius: 999px; color: rgba(255, 255, 255, .95); background: rgba(4, 9, 17, .58); font-size: clamp(.78rem, 1.7cqh, .88rem); font-weight: 700; line-height: 1.1; text-shadow: 0 1px 2px rgba(0, 0, 0, .9); backdrop-filter: blur(10px); }
 .home__status { display: flex; align-items: center; gap: 6px; margin-left: 2px; color: #fff; }
 .home__status i { width: 5px; height: 5px; border-radius: 50%; background: #74e2ff; box-shadow: 0 0 8px #74e2ff; }
 
@@ -540,8 +540,8 @@ onUnmounted(() => {
 .home__carousel-header { display: flex; align-items: end; justify-content: space-between; width: calc(100% - var(--home-content-left) - clamp(20px, 2.2cqw, 46px)); min-height: 24px; margin-left: var(--home-content-left); padding: 0 8px 4px; }
 .home__carousel-header div { display: flex; align-items: center; gap: 9px; }
 .home__carousel-header div > span { width: 2px; height: 15px; border-radius: 2px; background: rgba(191, 235, 249, .82); }
-.home__carousel-header strong { color: rgba(255, 255, 255, .72); font-size: clamp(.72rem, .7cqw, .88rem); font-weight: 600; letter-spacing: .04em; }
-.home__carousel-header p { margin: 0; color: rgba(255, 255, 255, .62); font-size: clamp(.61rem, .58cqw, .72rem); }
+.home__carousel-header strong { color: rgba(255, 255, 255, .84); font-size: clamp(.76rem, .7cqw, .88rem); font-weight: 700; letter-spacing: .04em; text-shadow: 0 1px 3px rgba(0, 0, 0, .9); }
+.home__carousel-header p { margin: 0; padding: 3px 7px; border-radius: 6px; color: rgba(255, 255, 255, .84); background: rgba(4, 9, 17, .42); font-size: clamp(.75rem, .62cqw, .82rem); font-weight: 600; text-shadow: 0 1px 2px rgba(0, 0, 0, .9); }
 .home__cards-viewport { width: 100%; overflow: hidden; mask-image: linear-gradient(90deg, transparent 0, #000 var(--rail-edge-fade), #000 calc(100% - var(--rail-edge-fade)), transparent 100%); }
 .home__cards-track { display: flex; gap: var(--rail-card-gap); width: max-content; padding: calc(var(--rail-reorder-lift) + 18px) var(--rail-trailing-space, 24px) 8px var(--rail-leading-space, 8px); will-change: transform; }
 .home__cards-track--ready { transition: transform var(--rail-motion-duration) var(--rail-motion-easing); }
@@ -556,14 +556,14 @@ onUnmounted(() => {
 .home-dialog-layer { position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(2, 5, 10, .24); }
 .game-menu { width: 324px; padding: 20px; border: 1px solid rgba(255, 255, 255, .14); border-radius: 19px; background: rgba(8, 14, 24, .9); box-shadow: 0 26px 70px rgba(0, 0, 0, .48); backdrop-filter: blur(24px); }
 .game-menu header { margin-bottom: 15px; text-align: center; }
-.game-menu header small, .confirm-dialog > small { color: #77defb; font-size: .62rem; font-weight: 700; letter-spacing: .16em; }
+.game-menu header small, .confirm-dialog > small { color: #8be7ff; font-size: .75rem; font-weight: 700; letter-spacing: .13em; }
 .game-menu h2 { margin: 5px 0 0; overflow: hidden; color: #fff; font-size: 1.05rem; white-space: nowrap; text-overflow: ellipsis; }
 .game-menu__actions { display: grid; gap: 7px; }
 .game-menu__actions button { width: 100%; height: 43px; padding: 0 16px; border: 1px solid rgba(255, 255, 255, .1); border-radius: 11px; color: rgba(255, 255, 255, .83); background: rgba(255, 255, 255, .055); cursor: pointer; }
 .game-menu__actions button:hover, .game-menu__actions button:focus-visible { border-color: rgba(129, 225, 255, .58); color: #fff; outline: none; background: rgba(105, 205, 241, .13); box-shadow: 0 0 0 2px rgba(100, 214, 255, .1); }
 .game-menu__actions .game-menu__action--primary { height: 49px; border-color: rgba(139, 230, 255, .5); color: #07121b; background: linear-gradient(135deg, #e7faff, #7edcf7); font-weight: 800; }
 .game-menu__actions .game-menu__action--primary:hover, .game-menu__actions .game-menu__action--primary:focus-visible { color: #041018; background: linear-gradient(135deg, #fff, #98e9ff); box-shadow: 0 0 0 2px rgba(156, 235, 255, .35), 0 8px 22px rgba(79, 199, 235, .2); }
-.game-menu footer { margin-top: 13px; color: rgba(255, 255, 255, .38); font-size: .58rem; text-align: center; }
+.game-menu footer { margin-top: 13px; color: rgba(255, 255, 255, .64); font-size: .75rem; font-weight: 600; text-align: center; }
 
 .confirm-dialog { width: min(390px, calc(100cqw - 40px)); padding: 24px; border: 1px solid rgba(255, 255, 255, .14); border-radius: 18px; background: rgba(8, 14, 24, .94); box-shadow: 0 26px 70px rgba(0, 0, 0, .5); backdrop-filter: blur(24px); }
 .confirm-dialog p { margin: 10px 0 20px; color: rgba(255, 255, 255, .78); font-size: .82rem; line-height: 1.6; }
@@ -600,7 +600,7 @@ onUnmounted(() => {
   .home__info { width: 650px; }
   .home__logo { max-width: 540px; max-height: 150px; }
   .home__company { font-size: .9rem; }
-  .home__tag, .home__status { font-size: .76rem; }
+  .home__tag, .home__status { font-size: .9rem; }
 }
 
 @container levabox-app (max-height: 760px) {

@@ -33,9 +33,7 @@ function readStoredSettings(): Partial<SettingsState> {
     const stored = JSON.parse(raw) as Partial<SettingsState>
     return {
       backgroundMusic: typeof stored.backgroundMusic === 'boolean' ? stored.backgroundMusic : defaults.backgroundMusic,
-      musicVolume: typeof stored.musicVolume === 'number'
-        ? Math.min(100, Math.max(0, Math.round(stored.musicVolume)))
-        : defaults.musicVolume,
+      musicVolume: normalizeVolume(stored.musicVolume),
       soundEffects: typeof stored.soundEffects === 'boolean' ? stored.soundEffects : defaults.soundEffects,
       fullscreen: typeof stored.fullscreen === 'boolean' ? stored.fullscreen : defaults.fullscreen,
       gamepadEnabled: typeof stored.gamepadEnabled === 'boolean' ? stored.gamepadEnabled : defaults.gamepadEnabled,
@@ -43,6 +41,17 @@ function readStoredSettings(): Partial<SettingsState> {
   } catch {
     return {}
   }
+}
+
+function normalizeVolume(value: unknown): number {
+  const parsed = typeof value === 'number'
+    ? value
+    : typeof value === 'string'
+      ? Number(value)
+      : Number.NaN
+
+  if (!Number.isFinite(parsed)) return defaults.musicVolume
+  return Math.min(100, Math.max(0, Math.round(parsed)))
 }
 
 function persistSettings(): void {

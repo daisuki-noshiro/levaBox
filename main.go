@@ -20,8 +20,8 @@ func main() {
 		Title:     "Galgame 管理器",
 		Width:     1500,
 		Height:    950,
-		MinWidth:  1000,
-		MinHeight: 700,
+		MinWidth:  800,
+		MinHeight: 560,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
