@@ -35,6 +35,7 @@ const confirmButtons = ref<HTMLButtonElement[]>([])
 const cardsViewport = ref<HTMLElement | null>(null)
 const cardsTrack = ref<HTMLElement | null>(null)
 const trackOffset = ref(0)
+const trackMotionReady = ref(false)
 const reorderGameId = ref<string | null>(null)
 const reorderDraft = ref<Game[]>([])
 const reorderOriginalIds = ref<string[]>([])
@@ -43,6 +44,7 @@ const pointerDragId = ref<number | null>(null)
 const pointerDragMoved = ref(false)
 let unregisterGamepadInput: () => void = () => undefined
 let trackResizeObserver: ResizeObserver | undefined
+let trackReadyFrame = 0
 
 const isReordering = computed(() => reorderGameId.value !== null)
 const displayQueue = computed(() => isReordering.value ? reorderDraft.value : props.queue)
@@ -319,7 +321,7 @@ function updateTrackPosition() {
 
     const focusRatio = Number.parseFloat(
       getComputedStyle(viewport).getPropertyValue('--rail-focus-ratio'),
-    ) || .28
+    ) || .34
     const focusPoint = viewport.clientWidth * focusRatio
     const leadingSpace = Math.max(0, focusPoint - card.offsetWidth / 2)
     const trailingSpace = Math.max(0, viewport.clientWidth - focusPoint - card.offsetWidth / 2)
@@ -334,6 +336,15 @@ function updateTrackPosition() {
     }
 
     trackOffset.value = Math.round(focusPoint - (card.offsetLeft + card.offsetWidth / 2))
+
+    if (!trackMotionReady.value && !trackReadyFrame) {
+      trackReadyFrame = requestAnimationFrame(() => {
+        trackReadyFrame = requestAnimationFrame(() => {
+          trackMotionReady.value = true
+          trackReadyFrame = 0
+        })
+      })
+    }
   })
 }
 
@@ -365,6 +376,7 @@ onUnmounted(() => {
   window.removeEventListener('pointercancel', handlePointerCancel)
   unregisterGamepadInput()
   trackResizeObserver?.disconnect()
+  if (trackReadyFrame) cancelAnimationFrame(trackReadyFrame)
 })
 </script>
 
@@ -414,7 +426,12 @@ onUnmounted(() => {
           <p v-if="isReordering">← / → 调整位置　Enter 确认　Esc 取消</p>
         </header>
         <div ref="cardsViewport" class="home__cards-viewport">
-          <div ref="cardsTrack" class="home__cards-track" :style="{ transform: `translate3d(${trackOffset}px, 0, 0)` }">
+          <div
+            ref="cardsTrack"
+            class="home__cards-track"
+            :class="{ 'home__cards-track--ready': trackMotionReady }"
+            :style="{ transform: `translate3d(${trackOffset}px, 0, 0)` }"
+          >
             <TransitionGroup name="queue">
               <GameCard
                 v-for="game in displayQueue"
@@ -481,7 +498,9 @@ onUnmounted(() => {
   --rail-selected-lift: clamp(16px, 2vh, 22px);
   --rail-reorder-lift: clamp(27px, 3.2vh, 35px);
   --rail-bottom-space: clamp(10px, 2vh, 24px);
-  --rail-focus-ratio: .28;
+  --rail-focus-ratio: .34;
+  --rail-motion-duration: 360ms;
+  --rail-motion-easing: cubic-bezier(.22, .8, .25, 1);
   --rail-edge-fade: clamp(16px, 1.8vw, 36px);
   --home-info-queue-gap: clamp(12px, 1.5vh, 22px);
   position: relative;
@@ -514,8 +533,9 @@ onUnmounted(() => {
 .home__carousel-header strong { color: rgba(255, 255, 255, .72); font-size: clamp(.72rem, .7vw, .88rem); font-weight: 600; letter-spacing: .04em; }
 .home__carousel-header p { margin: 0; color: rgba(255, 255, 255, .62); font-size: clamp(.61rem, .58vw, .72rem); }
 .home__cards-viewport { width: 100%; overflow: hidden; mask-image: linear-gradient(90deg, transparent 0, #000 var(--rail-edge-fade), #000 calc(100% - var(--rail-edge-fade)), transparent 100%); }
-.home__cards-track { display: flex; gap: var(--rail-card-gap); width: max-content; padding: calc(var(--rail-reorder-lift) + 18px) var(--rail-trailing-space, 24px) 8px var(--rail-leading-space, 8px); transition: transform 270ms cubic-bezier(.22, .72, .24, 1); will-change: transform; }
-.queue-move { transition: transform 230ms ease; }
+.home__cards-track { display: flex; gap: var(--rail-card-gap); width: max-content; padding: calc(var(--rail-reorder-lift) + 18px) var(--rail-trailing-space, 24px) 8px var(--rail-leading-space, 8px); will-change: transform; }
+.home__cards-track--ready { transition: transform var(--rail-motion-duration) var(--rail-motion-easing); }
+.queue-move { transition: transform var(--rail-motion-duration) var(--rail-motion-easing); }
 
 .home__empty { position: absolute; z-index: 4; top: 50%; left: 50%; display: grid; justify-items: center; transform: translate(-50%, -50%); color: rgba(255, 255, 255, .72); text-align: center; }
 .home__empty > span { display: grid; place-items: center; width: 52px; height: 52px; border: 1px solid rgba(255, 255, 255, .18); border-radius: 16px; font-size: 1.7rem; }

@@ -74,6 +74,12 @@ defineEmits<{
   filter: brightness(.88);
   transform: translateY(0) scale(1);
   transform-origin: center center;
+  transition:
+    transform var(--rail-motion-duration, 360ms) var(--rail-motion-easing, cubic-bezier(.22, .8, .25, 1)),
+    border-color var(--rail-motion-duration, 360ms) var(--rail-motion-easing, cubic-bezier(.22, .8, .25, 1)),
+    box-shadow var(--rail-motion-duration, 360ms) var(--rail-motion-easing, cubic-bezier(.22, .8, .25, 1)),
+    opacity var(--rail-motion-duration, 360ms) var(--rail-motion-easing, cubic-bezier(.22, .8, .25, 1)),
+    filter var(--rail-motion-duration, 360ms) var(--rail-motion-easing, cubic-bezier(.22, .8, .25, 1));
 }
 
 .game-card--grid { width: 100%; overflow: hidden; }
