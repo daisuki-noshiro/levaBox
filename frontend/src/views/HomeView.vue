@@ -268,6 +268,15 @@ function confirmRestore() {
 }
 
 function handleKeydown(event: KeyboardEvent) {
+  const target = event.target instanceof HTMLElement ? event.target : null
+  const isTextEntry = Boolean(target?.closest('input, select, textarea, [contenteditable="true"]'))
+  const focusedButton = target?.closest<HTMLButtonElement>('button') ?? null
+  const focusedGameCard = focusedButton?.matches('.game-card--rail') ? focusedButton : null
+  const overlayOpen = actionMenuOpen.value || confirmRestoreOpen.value || isReordering.value
+
+  if (isTextEntry) return
+  if (!overlayOpen && focusedButton && !focusedGameCard) return
+
   if (event.key === 'Escape') {
     if (isReordering.value || confirmRestoreOpen.value || actionMenuOpen.value) event.preventDefault()
     if (isReordering.value) cancelReorder()
@@ -290,6 +299,7 @@ function handleKeydown(event: KeyboardEvent) {
   }
 
   if (event.key === 'Enter') {
+    if (!overlayOpen && focusedGameCard?.dataset.gameId !== props.selectedGame?.id) return
     event.preventDefault()
     if (confirmRestoreOpen.value) {
       confirmChoice.value === 0 ? confirmRestore() : closeRestoreConfirmation()
