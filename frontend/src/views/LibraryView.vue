@@ -50,7 +50,7 @@ const visibleGames = computed(() => {
 .library__count strong { font-size: 1.55rem; }
 .library__count span { color: var(--muted); font-size: .72rem; }
 .library__toolbar { display: flex; align-items: center; gap: 12px; margin: 29px 0 26px; padding: 13px; border: 1px solid var(--line); border-radius: 20px; background: rgba(14, 22, 37, .72); }
-.library__search { display: flex; align-items: center; gap: 10px; width: min(330px, 30vw); padding: 0 14px; border: 1px solid var(--line); border-radius: 13px; background: rgba(255, 255, 255, .05); }
+.library__search { display: flex; align-items: center; gap: 10px; width: min(330px, 30cqw); padding: 0 14px; border: 1px solid var(--line); border-radius: 13px; background: rgba(255, 255, 255, .05); }
 .library__search span { color: #91a0b6; font-size: 1.5rem; }
 .library__search input { width: 100%; height: 43px; border: 0; outline: 0; color: #fff; background: transparent; font: inherit; }
 .library__filters { display: flex; gap: 7px; }
@@ -58,10 +58,10 @@ const visibleGames = computed(() => {
 .library__filters button:hover, .library__filters button.active { border-color: rgba(107, 214, 255, .25); color: #fff; background: rgba(104, 190, 255, .13); }
 .library__sort { display: flex; align-items: center; gap: 9px; margin-left: auto; color: var(--muted); font-size: .8rem; }
 .library__sort select { height: 43px; padding: 0 34px 0 13px; border: 1px solid var(--line); border-radius: 12px; color: #fff; background: #172136; }
-.library__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: clamp(16px, 2vw, 26px); padding-bottom: 42px; }
+.library__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: clamp(16px, 2cqw, 26px); padding-bottom: 42px; }
 .library__empty { display: grid; place-items: center; padding: 90px 20px; color: var(--muted); text-align: center; }
 .library__empty span { font-size: 3rem; }
 .library__empty h2 { margin: 12px 0 4px; color: #fff; }
 .library__empty p { margin: 0; }
-@media (max-width: 1050px) { .library__toolbar { flex-wrap: wrap; } .library__search { width: 100%; } .library__sort { margin-left: 0; } }
+@container levabox-app (max-width: 1050px) { .library__toolbar { flex-wrap: wrap; } .library__search { width: 100%; } .library__sort { margin-left: 0; } }
 </style>

@@ -48,9 +48,9 @@ const navigationItems: Array<{ page: MainPage; label: string }> = [
   position: fixed;
   z-index: 24;
   top: 50%;
-  left: clamp(16px, 1.7vw, 34px);
+  left: clamp(16px, 1.7cqw, 34px);
   display: grid;
-  gap: clamp(9px, .8vw, 14px);
+  gap: clamp(9px, .8cqw, 14px);
   transform: translateY(-50%);
 }
 
@@ -58,8 +58,8 @@ const navigationItems: Array<{ page: MainPage; label: string }> = [
   position: relative;
   display: grid;
   place-items: center;
-  width: clamp(46px, 3vw, 58px);
-  height: clamp(46px, 3vw, 58px);
+  width: clamp(46px, 3cqw, 58px);
+  height: clamp(46px, 3cqw, 58px);
   padding: 0;
   border: 1px solid transparent;
   border-radius: 9px;
@@ -70,8 +70,8 @@ const navigationItems: Array<{ page: MainPage; label: string }> = [
 }
 
 .global-navigation__item svg {
-  width: clamp(21px, 1.45vw, 28px);
-  height: clamp(21px, 1.45vw, 28px);
+  width: clamp(21px, 1.45cqw, 28px);
+  height: clamp(21px, 1.45cqw, 28px);
   fill: none;
   stroke: currentColor;
   stroke-width: 1.7;
@@ -106,7 +106,12 @@ const navigationItems: Array<{ page: MainPage; label: string }> = [
   transform: translateY(-50%);
 }
 
-@media (max-width: 1100px), (max-height: 760px) {
+@container levabox-app (max-width: 1100px) {
+  .global-navigation { left: 12px; gap: 7px; }
+  .global-navigation__item { width: 43px; height: 43px; }
+}
+
+@container levabox-app (max-height: 760px) {
   .global-navigation { left: 12px; gap: 7px; }
   .global-navigation__item { width: 43px; height: 43px; }
 }

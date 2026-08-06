@@ -18,10 +18,10 @@ func main() {
 	// Create application with options
 	err := wails.Run(&options.App{
 		Title:     "Galgame 管理器",
-		Width:     1280,
-		Height:    800,
-		MinWidth:  800,
-		MinHeight: 560,
+		Width:     1500,
+		Height:    950,
+		MinWidth:  1000,
+		MinHeight: 700,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},

@@ -1,5 +1,4 @@
 import { reactive, watch } from 'vue'
-import { DEFAULT_DISPLAY_PRESET_ID, displayPresets } from '../types/display'
 
 const STORAGE_KEY = 'levabox.settings.v1'
 
@@ -9,7 +8,6 @@ export interface SettingsState {
   soundEffects: boolean
   fullscreen: boolean
   gamepadEnabled: boolean
-  displayPresetId: string
 }
 
 const defaults: SettingsState = {
@@ -18,7 +16,6 @@ const defaults: SettingsState = {
   soundEffects: true,
   fullscreen: false,
   gamepadEnabled: true,
-  displayPresetId: DEFAULT_DISPLAY_PRESET_ID,
 }
 
 export const settingsState = reactive<SettingsState>({
@@ -42,9 +39,6 @@ function readStoredSettings(): Partial<SettingsState> {
       soundEffects: typeof stored.soundEffects === 'boolean' ? stored.soundEffects : defaults.soundEffects,
       fullscreen: typeof stored.fullscreen === 'boolean' ? stored.fullscreen : defaults.fullscreen,
       gamepadEnabled: typeof stored.gamepadEnabled === 'boolean' ? stored.gamepadEnabled : defaults.gamepadEnabled,
-      displayPresetId: displayPresets.some((preset) => preset.id === stored.displayPresetId)
-        ? stored.displayPresetId
-        : defaults.displayPresetId,
     }
   } catch {
     return {}

@@ -47,5 +47,5 @@ const actions = [
 .import-view__empty-icon { display: grid; place-items: center; width: 58px; height: 58px; border: 1px dashed #52627a; border-radius: 18px; color: #8fa0b8; font-size: 1.8rem; }
 .import-view__empty h3 { margin: 15px 0 5px; }
 .import-view__empty p { margin: 0; color: var(--muted); font-size: .8rem; }
-@media (max-width: 900px) { .import-view__actions { grid-template-columns: 1fr; } }
+@container levabox-app (max-width: 900px) { .import-view__actions { grid-template-columns: 1fr; } }
 </style>

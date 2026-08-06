@@ -168,7 +168,7 @@ defineEmits<{
 .game-card__body strong { font-size: 1rem; }
 .game-card__body span { color: #9caac0; font-size: 0.75rem; }
 
-@media (max-height: 760px) {
+@container levabox-app (max-height: 760px) {
   .game-card__body { padding: 9px 12px 11px; }
 }
 
