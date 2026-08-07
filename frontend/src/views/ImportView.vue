@@ -31,8 +31,8 @@ const actions = [
 <style scoped>
 .import-view { overflow-y: auto; }
 .import-view__badge { padding: 9px 14px; border: 1px solid rgba(115, 222, 255, .25); border-radius: 999px; color: #aeeeff; background: rgba(80, 185, 230, .1); font-size: .75rem; }
-.import-view__actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin: 30px 0 24px; }
-.import-card { display: grid; grid-template-rows: auto 1fr auto; min-height: 245px; padding: 23px; border: 1px solid var(--line); border-radius: 22px; background: linear-gradient(145deg, rgba(24, 36, 58, .92), rgba(13, 20, 34, .92)); box-shadow: var(--shadow); }
+.import-view__actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: clamp(16px, 1.3cqw, 28px); margin: clamp(24px, 3cqh, 44px) 0 clamp(22px, 2.8cqh, 38px); }
+.import-card { display: grid; grid-template-rows: auto 1fr auto; min-height: clamp(235px, 25cqh, 340px); padding: clamp(20px, 1.7cqw, 32px); border: 1px solid var(--line); border-radius: 22px; background: linear-gradient(145deg, rgba(24, 36, 58, .92), rgba(13, 20, 34, .92)); box-shadow: var(--shadow); }
 .import-card__icon { display: grid; place-items: center; width: 54px; height: 54px; border-radius: 16px; color: #9de9ff; background: linear-gradient(135deg, rgba(86, 204, 255, .18), rgba(153, 120, 255, .18)); font-size: .85rem; font-weight: 900; }
 .import-card h2 { margin: 18px 0 7px; font-size: 1.15rem; }
 .import-card p { margin: 0; color: var(--muted); font-size: .85rem; line-height: 1.65; }
@@ -48,4 +48,5 @@ const actions = [
 .import-view__empty h3 { margin: 15px 0 5px; }
 .import-view__empty p { margin: 0; color: var(--muted); font-size: .8rem; }
 @container levabox-app (max-width: 900px) { .import-view__actions { grid-template-columns: 1fr; } }
+@container levabox-app (max-height: 760px) { .import-view__actions { margin-top: 20px; } .import-card { min-height: 215px; } }
 </style>

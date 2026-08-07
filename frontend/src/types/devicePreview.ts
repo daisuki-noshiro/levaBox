@@ -13,6 +13,7 @@ export const previewDevices: readonly PreviewDevice[] = [
   { id: 'handheld-1280x720', name: '16:9 性能掌机', width: 1280, height: 720 },
   { id: 'handheld-1920x1080', name: '16:9 高清掌机', width: 1920, height: 1080 },
   { id: 'handheld-1920x1200', name: '16:10 高清掌机', width: 1920, height: 1200 },
+  { id: 'handheld-2560x1600', name: '16:10 超高清掌机', width: 2560, height: 1600 },
 ]
 
 export function findPreviewDevice(id: string): PreviewDevice {

@@ -6,7 +6,6 @@ import { playUiSound, unlockMediaAudio } from '../services/audioService'
 import { launchGame } from '../services/gameLauncher'
 import { registerLobbyGamepadInput } from '../services/inputService'
 import type { Game } from '../types/game'
-import type { MainPage } from '../types/navigation'
 
 type MenuActionId = 'launch' | 'front' | 'reorder' | 'remove' | 'restore'
 
@@ -19,7 +18,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   selectGame: [game: Game]
   notify: [message: string]
-  navigate: [page: MainPage]
   moveToFront: [gameId: string]
   commitReorder: [orderedIds: string[]]
   removeFromQueue: [gameId: string]
@@ -73,11 +71,6 @@ function setConfirmButton(element: unknown, index: number) {
   if (element instanceof HTMLButtonElement) confirmButtons.value[index] = element
 }
 
-function navigate(page: MainPage) {
-  playUiSound('confirm')
-  emit('navigate', page)
-}
-
 function handleGameClick(game: Game) {
   if (isReordering.value) return
   unlockMediaAudio()
@@ -121,6 +114,7 @@ function closeActionMenu() {
   if (!actionMenuOpen.value) return
   playUiSound('cancel')
   actionMenuOpen.value = false
+  if (props.selectedGame) focusGameCard(props.selectedGame.id)
 }
 
 function focusAction(index: number) {
@@ -166,6 +160,7 @@ function beginReorder(game: Game) {
   reorderDraft.value = [...props.queue]
   reorderGameId.value = game.id
   actionMenuOpen.value = false
+  focusGameCard(game.id)
 }
 
 function moveReorderingGame(direction: -1 | 1) {
@@ -207,6 +202,7 @@ function clearReorderState() {
   pointerDragGameId.value = null
   pointerDragId.value = null
   pointerDragMoved.value = false
+  if (props.selectedGame) focusGameCard(props.selectedGame.id)
 }
 
 function handlePointerDown(game: Game, event: PointerEvent) {
@@ -259,12 +255,57 @@ function closeRestoreConfirmation() {
   if (!confirmRestoreOpen.value) return
   playUiSound('cancel')
   confirmRestoreOpen.value = false
+  if (props.selectedGame) focusGameCard(props.selectedGame.id)
 }
 
 function confirmRestore() {
   playUiSound('confirm')
   emit('restoreDefault')
   confirmRestoreOpen.value = false
+  if (props.selectedGame) focusGameCard(props.selectedGame.id)
+}
+
+function handleEscape(): boolean {
+  if (confirmRestoreOpen.value) {
+    closeRestoreConfirmation()
+    return true
+  }
+  if (actionMenuOpen.value) {
+    closeActionMenu()
+    return true
+  }
+  if (isReordering.value) {
+    cancelReorder()
+    return true
+  }
+  return false
+}
+
+function handleConfirmInput(): void {
+  if (confirmRestoreOpen.value) {
+    confirmChoice.value === 0 ? confirmRestore() : closeRestoreConfirmation()
+  } else if (actionMenuOpen.value) {
+    void executeAction(menuActions.value[focusedActionIndex.value]?.id ?? 'launch')
+  } else if (isReordering.value) {
+    confirmReorder()
+  } else {
+    openActionMenu()
+  }
+}
+
+function handleHorizontalInput(direction: -1 | 1): void {
+  if (confirmRestoreOpen.value) {
+    confirmChoice.value = confirmChoice.value === 0 ? 1 : 0
+    nextTick(() => confirmButtons.value[confirmChoice.value]?.focus())
+  } else if (isReordering.value) {
+    moveReorderingGame(direction)
+  } else if (!actionMenuOpen.value) {
+    selectAdjacent(direction)
+  }
+}
+
+function handleVerticalInput(direction: -1 | 1): void {
+  if (actionMenuOpen.value) focusAction(focusedActionIndex.value + direction)
 }
 
 function handleKeydown(event: KeyboardEvent) {
@@ -276,14 +317,6 @@ function handleKeydown(event: KeyboardEvent) {
 
   if (isTextEntry) return
   if (!overlayOpen && focusedButton && !focusedGameCard) return
-
-  if (event.key === 'Escape') {
-    if (isReordering.value || confirmRestoreOpen.value || actionMenuOpen.value) event.preventDefault()
-    if (isReordering.value) cancelReorder()
-    else if (confirmRestoreOpen.value) closeRestoreConfirmation()
-    else if (actionMenuOpen.value) closeActionMenu()
-    return
-  }
 
   if (actionMenuOpen.value && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
     event.preventDefault()
@@ -367,11 +400,12 @@ onMounted(() => {
   window.addEventListener('pointerup', handlePointerUp)
   window.addEventListener('pointercancel', handlePointerCancel)
   unregisterGamepadInput = registerLobbyGamepadInput({
-    moveLeft: () => isReordering.value ? moveReorderingGame(-1) : selectAdjacent(-1),
-    moveRight: () => isReordering.value ? moveReorderingGame(1) : selectAdjacent(1),
-    confirm: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' })),
-    cancel: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })),
-    openMenu: openActionMenu,
+    moveLeft: () => handleHorizontalInput(-1),
+    moveRight: () => handleHorizontalInput(1),
+    moveUp: () => handleVerticalInput(-1),
+    moveDown: () => handleVerticalInput(1),
+    confirm: handleConfirmInput,
+    cancel: handleEscape,
   })
   trackResizeObserver = new ResizeObserver(updateTrackPosition)
   if (cardsViewport.value) trackResizeObserver.observe(cardsViewport.value)
@@ -388,10 +422,12 @@ onUnmounted(() => {
   trackResizeObserver?.disconnect()
   if (trackReadyFrame) cancelAnimationFrame(trackReadyFrame)
 })
+
+defineExpose({ handleEscape })
 </script>
 
 <template>
-  <section class="home" :class="{ 'home--modal-open': actionMenuOpen || confirmRestoreOpen }">
+  <section class="home" :class="{ 'home--modal-open': actionMenuOpen || confirmRestoreOpen, 'home--empty': !queue.length }">
     <div v-if="selectedGame" class="home__media" aria-hidden="true">
       <Transition name="media-fade" mode="out-in">
         <video
@@ -460,10 +496,7 @@ onUnmounted(() => {
       </section>
     </div>
 
-    <section v-else class="home__empty">
-      <span>＋</span><h1>游戏队列为空</h1><p>游戏资料仍保留在游戏库中。</p>
-      <button @click="navigate('library')">打开游戏库</button>
-    </section>
+    <section v-else class="home__empty"><h1>游戏队列为空</h1></section>
 
     <Transition name="dialog-fade">
       <div v-if="actionMenuOpen && selectedGame" class="home-dialog-layer" role="presentation" @click.self="closeActionMenu">
@@ -517,12 +550,13 @@ onUnmounted(() => {
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  background: radial-gradient(circle at 70% 20%, #182438, #070b12 64%);
+  background: linear-gradient(145deg, #07090d, #0d1117 52%, #090c11);
 }
 .home__media, .home__backdrop, .home__shade { position: absolute; inset: 0; }
 .home__media { transition: filter 180ms ease, transform 180ms ease; }
 .home__backdrop { width: 100%; height: 100%; object-fit: cover; }
 .home__shade { background: linear-gradient(90deg, rgba(3, 7, 13, .78) 0%, rgba(3, 7, 13, .36) 30%, rgba(3, 7, 13, .04) 70%), linear-gradient(0deg, rgba(3, 7, 13, .94) 0%, rgba(3, 7, 13, .48) 39%, transparent 66%), linear-gradient(180deg, rgba(3, 7, 13, .23), transparent 20%); transition: background 180ms ease; }
+.home--empty .home__shade { background: linear-gradient(180deg, rgba(255, 255, 255, .018), transparent 42%), linear-gradient(0deg, rgba(0, 0, 0, .16), transparent 38%); }
 .home--modal-open .home__media { filter: blur(6px) brightness(.66); transform: scale(1.015); }
 .home--modal-open .home__shade { background: rgba(3, 7, 13, .44); }
 
@@ -547,11 +581,8 @@ onUnmounted(() => {
 .home__cards-track--ready { transition: transform var(--rail-motion-duration) var(--rail-motion-easing); }
 .queue-move { transition: transform var(--rail-motion-duration) var(--rail-motion-easing); }
 
-.home__empty { position: absolute; z-index: 4; top: 50%; left: 50%; display: grid; justify-items: center; transform: translate(-50%, -50%); color: rgba(255, 255, 255, .72); text-align: center; }
-.home__empty > span { display: grid; place-items: center; width: 52px; height: 52px; border: 1px solid rgba(255, 255, 255, .18); border-radius: 16px; font-size: 1.7rem; }
-.home__empty h1 { margin: 15px 0 4px; color: #fff; font-size: 1.35rem; }
-.home__empty p { margin: 0 0 18px; font-size: .76rem; }
-.home__empty button { min-height: 40px; padding: 0 16px; border: 1px solid rgba(116, 223, 255, .32); border-radius: 11px; color: #dff8ff; background: rgba(93, 201, 241, .11); cursor: pointer; }
+.home__empty { position: absolute; z-index: 4; top: 50%; left: 50%; transform: translate(-50%, -50%); color: rgba(255, 255, 255, .82); text-align: center; }
+.home__empty h1 { margin: 0; font-size: clamp(1.3rem, 3cqh, 2.2rem); font-weight: 700; letter-spacing: .015em; }
 
 .home-dialog-layer { position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(2, 5, 10, .24); }
 .game-menu { width: 324px; padding: 20px; border: 1px solid rgba(255, 255, 255, .14); border-radius: 19px; background: rgba(8, 14, 24, .9); box-shadow: 0 26px 70px rgba(0, 0, 0, .48); backdrop-filter: blur(24px); }

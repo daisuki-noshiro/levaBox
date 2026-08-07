@@ -36,8 +36,8 @@ defineEmits<{ back: []; notify: [message: string] }>()
 <style scoped>
 .detail { position: relative; height: 100%; min-height: 0; overflow-y: auto; background-size: cover !important; }
 .detail__veil { position: fixed; inset: 0; background: linear-gradient(90deg, rgba(4, 8, 17, .94), rgba(5, 9, 18, .72) 55%, rgba(5, 9, 18, .35)), linear-gradient(0deg, rgba(4, 8, 17, .9), transparent); }
-.detail__back { position: relative; z-index: 2; margin: 28px 0 0 clamp(78px, 7cqw, 126px); padding: 10px 14px; border: 1px solid rgba(255, 255, 255, .12); border-radius: 12px; color: #d3dbe7; background: rgba(4, 8, 17, .32); cursor: pointer; }
-.detail__content { position: relative; z-index: 2; display: grid; grid-template-columns: minmax(220px, 28cqw) minmax(0, 680px); align-items: center; gap: clamp(38px, 5cqw, 84px); width: min(1180px, calc(100% - 110px)); min-height: calc(100% - 84px); margin: 0 auto; padding: 30px 0 54px; }
+.detail__back { position: relative; z-index: 2; margin: 28px 0 0 clamp(40px, 4cqw, 96px); padding: 10px 14px; border: 1px solid rgba(255, 255, 255, .12); border-radius: 12px; color: #d3dbe7; background: rgba(4, 8, 17, .32); cursor: pointer; }
+.detail__content { position: relative; z-index: 2; display: grid; grid-template-columns: minmax(220px, 28cqw) minmax(0, 760px); align-items: center; gap: clamp(34px, 4.5cqw, 94px); width: min(1600px, calc(100% - clamp(80px, 8cqw, 200px))); min-height: calc(100% - 84px); margin: 0 auto; padding: 30px 0 clamp(54px, 6cqh, 88px); }
 .detail__cover { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; aspect-ratio: 3 / 4; overflow: hidden; border: 1px solid rgba(255, 255, 255, .22); border-radius: 26px; box-shadow: 0 30px 70px rgba(0, 0, 0, .45); }
 .detail__cover::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 72% 18%, rgba(255, 255, 255, .45), transparent 25%), linear-gradient(150deg, transparent 30%, rgba(255, 255, 255, .14)); }
 .detail__cover span { position: relative; z-index: 1; font-size: clamp(5rem, 11cqw, 10rem); font-weight: 900; text-shadow: 0 15px 35px rgba(0, 0, 0, .3); }
@@ -55,4 +55,5 @@ defineEmits<{ back: []; notify: [message: string] }>()
 .detail__actions { display: flex; gap: 10px; margin-top: 24px; }
 @container levabox-app (max-width: 850px) { .detail__content { grid-template-columns: 190px 1fr; width: calc(100% - 60px); gap: 28px; } .detail__facts { grid-template-columns: repeat(2, 1fr); } }
 @container levabox-app (max-height: 760px) { .detail__content { align-items: start; padding-top: 18px; } .detail__cover { max-height: 490px; justify-self: center; } .detail__info h1 { font-size: clamp(2.5rem, 4.5cqw, 4.4rem); } .detail__summary p { line-height: 1.55; } }
+@container levabox-app (max-width: 1100px) and (max-height: 760px) { .detail__actions { flex-wrap: wrap; } }
 </style>

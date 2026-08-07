@@ -89,7 +89,7 @@ onMounted(async () => {
 
 <style scoped>
 .settings { overflow-y: auto; }
-.settings__layout { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin-top: 26px; padding-bottom: 40px; }
+.settings__layout { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(18px, 1.4cqw, 30px); margin-top: clamp(22px, 3cqh, 42px); padding-bottom: clamp(36px, 5cqh, 70px); }
 .settings__group { align-self: start; overflow: hidden; border: 1px solid var(--line); border-radius: 22px; background: rgba(14, 22, 37, .8); box-shadow: var(--shadow); }
 .settings__group-title { display: flex; gap: 14px; padding: 19px 23px; border-bottom: 1px solid var(--line); background: linear-gradient(120deg, rgba(103, 205, 255, .09), rgba(151, 117, 255, .06)); }
 .settings__group-title > span { display: grid; place-items: center; flex: 0 0 auto; width: 40px; height: 40px; border-radius: 12px; color: #9ceaff; background: rgba(100, 207, 255, .13); }

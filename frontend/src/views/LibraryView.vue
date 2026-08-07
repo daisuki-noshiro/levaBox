@@ -58,10 +58,11 @@ const visibleGames = computed(() => {
 .library__filters button:hover, .library__filters button.active { border-color: rgba(107, 214, 255, .25); color: #fff; background: rgba(104, 190, 255, .13); }
 .library__sort { display: flex; align-items: center; gap: 9px; margin-left: auto; color: var(--muted); font-size: .8rem; }
 .library__sort select { height: 43px; padding: 0 34px 0 13px; border: 1px solid var(--line); border-radius: 12px; color: #fff; background: #172136; }
-.library__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: clamp(16px, 2cqw, 26px); padding-bottom: 42px; }
+.library__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(clamp(180px, 12cqw, 240px), 1fr)); gap: clamp(16px, 1.5cqw, 30px); padding-bottom: clamp(36px, 5cqh, 70px); }
 .library__empty { display: grid; place-items: center; padding: 90px 20px; color: var(--muted); text-align: center; }
 .library__empty span { font-size: 3rem; }
 .library__empty h2 { margin: 12px 0 4px; color: #fff; }
 .library__empty p { margin: 0; }
 @container levabox-app (max-width: 1050px) { .library__toolbar { flex-wrap: wrap; } .library__search { width: 100%; } .library__sort { margin-left: 0; } }
+@container levabox-app (max-height: 760px) { .library__toolbar { margin: 20px 0 20px; } }
 </style>

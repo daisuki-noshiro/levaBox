@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import GlobalNavigation from './GlobalNavigation.vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import BottomCommandBar from './BottomCommandBar.vue'
+import GlobalMenuOverlay from './GlobalMenuOverlay.vue'
 import { mockGames } from '../data/mockGames'
 import { getBatteryLevel } from '../services/deviceService'
+import { registerGlobalGamepadInput } from '../services/inputService'
 import type { Game, QueueMode } from '../types/game'
 import type { MainPage, Page } from '../types/navigation'
 import GameDetailView from '../views/GameDetailView.vue'
@@ -20,6 +22,12 @@ const detailGame = ref<Game | null>(null)
 const queueMode = ref<QueueMode>('default')
 const batteryLevel = ref(78)
 const toastMessage = ref('')
+const globalMenuOpen = ref(false)
+const appShell = ref<HTMLElement | null>(null)
+const homeView = ref<InstanceType<typeof HomeView> | null>(null)
+const globalMenu = ref<InstanceType<typeof GlobalMenuOverlay> | null>(null)
+let focusBeforeGlobalMenu: HTMLElement | null = null
+let unregisterGlobalGamepadInput: () => void = () => undefined
 let toastTimer: ReturnType<typeof setTimeout> | undefined
 
 const activeMainPage = computed<MainPage>(() => currentPage.value === 'detail' ? previousPage.value : currentPage.value)
@@ -32,6 +40,50 @@ function navigate(page: MainPage) {
   previousPage.value = page
   if (page === 'home' && !selectedHomeGame.value) {
     selectedHomeGameId.value = homeQueue.value[0]?.id ?? null
+  }
+}
+
+function openGlobalMenu(): void {
+  if (globalMenuOpen.value) return
+  focusBeforeGlobalMenu = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  globalMenuOpen.value = true
+  nextTick(() => globalMenu.value?.focusCurrent())
+}
+
+function closeGlobalMenu(restoreFocus = true): void {
+  if (!globalMenuOpen.value) return
+  globalMenuOpen.value = false
+  nextTick(() => {
+    if (restoreFocus && focusBeforeGlobalMenu?.isConnected) focusBeforeGlobalMenu.focus({ preventScroll: true })
+    else appShell.value?.focus({ preventScroll: true })
+    focusBeforeGlobalMenu = null
+  })
+}
+
+function toggleGlobalMenu(): void {
+  globalMenuOpen.value ? closeGlobalMenu() : openGlobalMenu()
+}
+
+function navigateFromGlobalMenu(page: MainPage): void {
+  const pageChanged = page !== activeMainPage.value || currentPage.value === 'detail'
+  if (pageChanged) navigate(page)
+  closeGlobalMenu(!pageChanged)
+}
+
+function handleAppKeydown(event: KeyboardEvent): void {
+  if (event.key !== 'Escape') return
+  event.preventDefault()
+  event.stopPropagation()
+
+  if (currentPage.value === 'home' && homeView.value?.handleEscape()) return
+  if (globalMenuOpen.value) closeGlobalMenu()
+  else openGlobalMenu()
+}
+
+function handleShellPointerDown(event: PointerEvent): void {
+  const target = event.target instanceof HTMLElement ? event.target : null
+  if (!target?.closest('button, input, select, textarea, a, [tabindex]:not([tabindex="-1"])')) {
+    appShell.value?.focus({ preventScroll: true })
   }
 }
 
@@ -122,30 +174,62 @@ function notify(message: string) {
 
 onMounted(async () => {
   batteryLevel.value = await getBatteryLevel()
+  unregisterGlobalGamepadInput = registerGlobalGamepadInput({
+    isMenuOpen: () => globalMenuOpen.value,
+    toggleMenu: toggleGlobalMenu,
+    moveUp: () => globalMenu.value?.moveFocus(-1),
+    moveDown: () => globalMenu.value?.moveFocus(1),
+    confirm: () => globalMenu.value?.confirmFocused(),
+    cancel: () => closeGlobalMenu(),
+  })
+  appShell.value?.focus({ preventScroll: true })
+})
+
+onUnmounted(() => {
+  unregisterGlobalGamepadInput()
+  if (toastTimer) clearTimeout(toastTimer)
 })
 </script>
 
 <template>
-  <div class="app-shell">
-    <GlobalNavigation :current-page="activeMainPage" @navigate="navigate" />
+  <div
+    ref="appShell"
+    class="app-shell"
+    tabindex="-1"
+    @keydown.capture="handleAppKeydown"
+    @pointerdown.capture="handleShellPointerDown"
+  >
+    <div class="app-page-layer" :aria-hidden="globalMenuOpen" :inert="globalMenuOpen || undefined">
+      <HomeView
+        v-if="currentPage === 'home'"
+        ref="homeView"
+        :queue="homeQueue"
+        :selected-game="selectedHomeGame"
+        :battery-level="batteryLevel"
+        @select-game="selectGame"
+        @notify="notify"
+        @move-to-front="moveGameToFront"
+        @commit-reorder="commitQueueOrder"
+        @remove-from-queue="removeGameFromQueue"
+        @restore-default="restoreDefaultQueue"
+      />
+      <LibraryView v-else-if="currentPage === 'library'" :games="mockGames" @open-detail="openDetail" />
+      <ImportView v-else-if="currentPage === 'import'" @notify="notify" />
+      <SettingsView v-else-if="currentPage === 'settings'" />
+      <GameDetailView v-else-if="detailGame" :game="detailGame" @back="returnFromDetail" @notify="notify" />
+    </div>
 
-    <HomeView
-      v-if="currentPage === 'home'"
-      :queue="homeQueue"
-      :selected-game="selectedHomeGame"
-      :battery-level="batteryLevel"
-      @select-game="selectGame"
-      @notify="notify"
-      @navigate="navigate"
-      @move-to-front="moveGameToFront"
-      @commit-reorder="commitQueueOrder"
-      @remove-from-queue="removeGameFromQueue"
-      @restore-default="restoreDefaultQueue"
-    />
-    <LibraryView v-else-if="currentPage === 'library'" :games="mockGames" @open-detail="openDetail" />
-    <ImportView v-else-if="currentPage === 'import'" @notify="notify" />
-    <SettingsView v-else-if="currentPage === 'settings'" />
-    <GameDetailView v-else-if="detailGame" :game="detailGame" @back="returnFromDetail" @notify="notify" />
+    <BottomCommandBar :menu-open="globalMenuOpen" :inert="globalMenuOpen || undefined" @toggle-menu="toggleGlobalMenu" />
+
+    <Transition name="global-menu">
+      <GlobalMenuOverlay
+        v-if="globalMenuOpen"
+        ref="globalMenu"
+        :current-page="activeMainPage"
+        @close="closeGlobalMenu"
+        @navigate="navigateFromGlobalMenu"
+      />
+    </Transition>
 
     <Transition name="toast">
       <div v-if="toastMessage" class="app-toast" role="status"><span>i</span>{{ toastMessage }}</div>
