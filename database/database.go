@@ -5,6 +5,8 @@ import (
 	_ "embed"
 	"os"
 	"path/filepath"
+
+	_ "modernc.org/sqlite"
 )
 
 //go:embed schema.sql

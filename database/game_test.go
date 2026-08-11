@@ -14,7 +14,9 @@ func TestUpdateGameTitle(t *testing.T) {
 	defer db.Close()
 
 	db.SetMaxOpenConns(1)
-	initDatabase(db)
+	if err := initDatabase(db); err != nil {
+		t.Fatal(err)
+	}
 
 	game := model.Game{
 		ID:       "G001",

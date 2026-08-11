@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS game_tags(
                       PRIMARY KEY (game_id, tag_id),
                       FOREIGN KEY (game_id) REFERENCES games(id),
                       FOREIGN KEY (tag_id) REFERENCES tags(id)
-)
+);
 
 CREATE TABLE IF NOT EXISTS game_queue(
                       queue_type TEXT NOT NULL

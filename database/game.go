@@ -8,6 +8,11 @@ import (
 )
 
 func InsertGame(db *sql.DB, game model.Game) error {
+	normalizedExecutablePath, err := normalizePath(game.Launch.ExecutablePath)
+	if err != nil {
+		return err
+	}
+
 	var lastPlayedAt any
 
 	if game.LastPlayedAt != nil {
@@ -41,7 +46,7 @@ func InsertGame(db *sql.DB, game model.Game) error {
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 	`
 
-	_, err := db.Exec(
+	_, err = db.Exec(
 		query,
 		game.ID,
 		game.Title,
@@ -53,7 +58,7 @@ func InsertGame(db *sql.DB, game model.Game) error {
 		game.Background.Path,
 		game.BGMPath,
 		game.BGMEnabled,
-		game.Launch.ExecutablePath,
+		normalizedExecutablePath,
 		game.Launch.WorkingDirectory,
 		game.Favorite,
 		game.Progress,
@@ -88,6 +93,7 @@ func GetGameByID(db *sql.DB, id string) (model.Game, error) {
 	`
 
 	var game model.Game
+	var backgroundType sql.NullString
 	var lastPlayedAt sql.NullInt64
 
 	err := db.QueryRow(query, id).Scan(
@@ -97,7 +103,7 @@ func GetGameByID(db *sql.DB, id string) (model.Game, error) {
 		&game.Year,
 		&game.Description,
 		&game.CoverPath,
-		&game.Background.Type,
+		&backgroundType,
 		&game.Background.Path,
 		&game.BGMPath,
 		&game.BGMEnabled,
@@ -108,6 +114,10 @@ func GetGameByID(db *sql.DB, id string) (model.Game, error) {
 		&game.TotalPlaySeconds,
 		&lastPlayedAt,
 	)
+
+	if backgroundType.Valid {
+		game.Background.Type = model.BackgroundType(backgroundType.String)
+	}
 
 	if lastPlayedAt.Valid {
 		t := time.Unix(lastPlayedAt.Int64, 0)
@@ -187,6 +197,17 @@ func ListGames(db *sql.DB) ([]model.Game, error) {
 	}
 
 	return games, rows.Err()
+}
+
+// 修改游戏封面
+func UpdateGameCover(db *sql.DB, gameID string, path string) error {
+	query := `
+		UPDATE games
+		SET cover_path = ?
+		WHERE id = ?;
+	`
+	_, err := db.Exec(query, path, gameID)
+	return err
 }
 
 // 修改游戏标题
@@ -283,6 +304,11 @@ func UpdateGameBGMEnabled(db *sql.DB, gameID string, enabled bool) error {
 
 // 启动路径设置
 func UpdateLaunchConfig(db *sql.DB, gameID string, launch model.LaunchConfig) error {
+	normalizedExecutablePath, err := normalizePath(launch.ExecutablePath)
+	if err != nil {
+		return err
+	}
+
 	query := `
 		UPDATE games
 		SET
@@ -291,9 +317,9 @@ func UpdateLaunchConfig(db *sql.DB, gameID string, launch model.LaunchConfig) er
 		WHERE id = ?;
 	`
 
-	_, err := db.Exec(
+	_, err = db.Exec(
 		query,
-		launch.ExecutablePath,
+		normalizedExecutablePath,
 		launch.WorkingDirectory,
 		gameID,
 	)
