@@ -25,12 +25,12 @@ CREATE TABLE IF NOT EXISTS games (
                        last_played_at      INTEGER
 );
 
-CREATE TABLE IF NOT EXISTS (
+CREATE TABLE IF NOT EXISTS tags (
                       id      TEXT PRIMARY KEY,
                       name    TEXT NOT NULL UNIQUE
 );
 
-CREATE TABLE IF NOT EXISTS (
+CREATE TABLE IF NOT EXISTS game_tags(
                       game_id TEXT NOT NULL,
                       tag_id TEXT NOT NULL,
                       PRIMARY KEY (game_id, tag_id),
@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS (
                       FOREIGN KEY (tag_id) REFERENCES tags(id)
 )
 
-CREATE TABLE IF NOT EXISTS (
+CREATE TABLE IF NOT EXISTS game_queue(
                       queue_type TEXT NOT NULL
                       CHECK (queue_type IN ('default', 'current')),
 

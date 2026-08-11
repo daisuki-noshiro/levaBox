@@ -9,29 +9,33 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-func TestInsertGame(t *testing.T) {
+func TestUpdateGameTitle(t *testing.T) {
 	db, _ := sql.Open("sqlite", ":memory:")
 	defer db.Close()
 
 	db.SetMaxOpenConns(1)
-
 	initDatabase(db)
 
 	game := model.Game{
-		ID:          "G001",
-		Title:       "测试游戏",
-		Company:     "测试公司",
-		Year:        2026,
-		Description: "这是测试数据",
-
-		Favorite:         false,
-		Progress:         model.ProgressNotStarted,
-		TotalPlaySeconds: 0,
+		ID:       "G001",
+		Title:    "旧标题",
+		Progress: model.ProgressNotStarted,
 	}
 
-	InsertGame(db, game)
-	savedGame, _ := GetGameByID(db, "G001")
-	if savedGame.Title != game.Title {
-		t.Fatalf("Title mismatch")
+	if err := InsertGame(db, game); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := UpdateGameTitle(db, "G001", "新标题"); err != nil {
+		t.Fatal(err)
+	}
+
+	savedGame, err := GetGameByID(db, "G001")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if savedGame.Title != "新标题" {
+		t.Fatalf("标题修改失败")
 	}
 }
