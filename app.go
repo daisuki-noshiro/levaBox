@@ -2,6 +2,7 @@ package main
 
 import (
 	"GalgameBox/database"
+	"GalgameBox/service"
 	"context"
 	"database/sql"
 	"log"
@@ -11,6 +12,8 @@ import (
 type App struct {
 	ctx context.Context
 	db  *sql.DB
+
+	importService *service.ImportService
 }
 
 // NewApp creates a new App application struct
@@ -30,6 +33,7 @@ func (a *App) startup(ctx context.Context) {
 	}
 
 	a.db = db
+	a.importService = service.NewImportService(db)
 }
 
 func (a *App) shutdown(ctx context.Context) {
@@ -38,4 +42,8 @@ func (a *App) shutdown(ctx context.Context) {
 			log.Printf("关闭数据库失败: %v", err)
 		}
 	}
+}
+
+func (a *App) StartImport(executablePath string) (service.StartImportResult, error) {
+	return a.importService.StartImport(executablePath)
 }
