@@ -44,6 +44,7 @@ var vndbHTTPClient = &http.Client{
 	Timeout: 10 * time.Second,
 }
 
+// 查询游戏对应
 func SearchVNDB(keyword string) ([]vndbAPIResult, error) {
 	requestData := vndbSearchRequest{
 		Filters: []any{
