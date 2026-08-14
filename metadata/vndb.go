@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -26,6 +27,8 @@ type vndbImage struct {
 	Thumbnail string `json:"thumbnail"`
 }
 
+// VNDB API 返回的原始搜索结果。
+// 只在 metadata 包内部使用。
 type vndbAPIResult struct {
 	ID         string          `json:"id"`
 	Title      string          `json:"title"`
@@ -40,12 +43,23 @@ type vndbSearchResponse struct {
 	More    bool            `json:"more"`
 }
 
+// VNDBSearchResult 是 levaBox 使用的 VNDB 搜索结果。
+// 作用只有一个：帮助用户判断“哪个条目才是自己的游戏”。
+type VNDBSearchResult struct {
+	ID        string
+	Title     string
+	AltTitle  string
+	Released  string
+	Companies []string
+	Thumbnail string
+}
+
 var vndbHTTPClient = &http.Client{
 	Timeout: 10 * time.Second,
 }
 
-// 查询游戏对应
-func SearchVNDB(keyword string) ([]vndbAPIResult, error) {
+// SearchVNDB 根据游戏名称搜索 VNDB 条目。
+func SearchVNDB(keyword string) ([]VNDBSearchResult, error) {
 	requestData := vndbSearchRequest{
 		Filters: []any{
 			"search",
@@ -86,11 +100,53 @@ func SearchVNDB(keyword string) ([]vndbAPIResult, error) {
 		)
 	}
 
-	var result vndbSearchResponse
+	var response vndbSearchResponse
 
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		return nil, err
 	}
 
-	return result.Results, nil
+	results := make([]VNDBSearchResult, 0, len(response.Results))
+
+	for _, item := range response.Results {
+		results = append(results, buildVNDBSearchResult(item))
+	}
+
+	return results, nil
+}
+
+func buildVNDBSearchResult(result vndbAPIResult) VNDBSearchResult {
+	thumbnail := ""
+
+	if result.Image != nil {
+		thumbnail = result.Image.Thumbnail
+	}
+
+	return VNDBSearchResult{
+		ID:        result.ID,
+		Title:     strings.TrimSpace(result.Title),
+		AltTitle:  strings.TrimSpace(result.AltTitle),
+		Released:  result.Released,
+		Companies: buildDeveloperNames(result.Developers),
+		Thumbnail: thumbnail,
+	}
+}
+
+// buildDeveloperNames 把 VNDB developers 整理成 levaBox 使用的名称列表。
+func buildDeveloperNames(developers []vndbDeveloper) []string {
+	companies := make([]string, 0, len(developers))
+	seen := make(map[string]bool)
+
+	for _, developer := range developers {
+		name := strings.TrimSpace(developer.Name)
+
+		if name == "" || seen[name] {
+			continue
+		}
+
+		seen[name] = true
+		companies = append(companies, name)
+	}
+
+	return companies
 }
