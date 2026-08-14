@@ -43,8 +43,7 @@ type vndbSearchResponse struct {
 	More    bool            `json:"more"`
 }
 
-// VNDBSearchResult 是 levaBox 使用的 VNDB 搜索结果。
-// 作用只有一个：帮助用户判断“哪个条目才是自己的游戏”。
+// VNDBSearchResult 表示按名称搜索得到的 VNDB 条目。
 type VNDBSearchResult struct {
 	ID        string
 	Title     string

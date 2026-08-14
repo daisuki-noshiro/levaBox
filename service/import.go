@@ -56,6 +56,7 @@ func (s *ImportService) StartImport(executablePath string) (StartImportResult, e
 		ExecutablePath:   absolutePath,
 		WorkingDirectory: workingDirectory,
 		SearchKeyword:    searchKeyword,
+		Title:            searchKeyword,
 	}
 
 	return StartImportResult{

@@ -10,18 +10,10 @@ import (
 
 const vndbReleaseURL = "https://api.vndb.org/kana/release"
 
-// VNDBImageCandidate 是 levaBox 使用的图片候选。
-type VNDBImageCandidate struct {
-	URL       string
-	Thumbnail string
-	Width     int
-	Height    int
-}
-
 // VNDBImages 是一个 VNDB 条目可提供的图片候选。
 type VNDBImages struct {
-	Covers      []VNDBImageCandidate
-	Backgrounds []VNDBImageCandidate
+	Covers      []ImageCandidate
+	Backgrounds []ImageCandidate
 }
 
 // VNDB /release 返回的原始图片。
@@ -134,8 +126,8 @@ func GetVNDBImages(vndbID string) (VNDBImages, error) {
 // buildVNDBImages 整理 dig 图片并根据长宽分类。
 func buildVNDBImages(vndbID string, images []vndbReleaseImage) VNDBImages {
 	result := VNDBImages{
-		Covers:      make([]VNDBImageCandidate, 0),
-		Backgrounds: make([]VNDBImageCandidate, 0),
+		Covers:      make([]ImageCandidate, 0),
+		Backgrounds: make([]ImageCandidate, 0),
 	}
 
 	seen := make(map[string]bool)
@@ -168,11 +160,17 @@ func buildVNDBImages(vndbID string, images []vndbReleaseImage) VNDBImages {
 		width := image.Dims[0]
 		height := image.Dims[1]
 
-		candidate := VNDBImageCandidate{
+		var thumbnail *string
+		if image.Thumbnail != "" {
+			thumbnail = &image.Thumbnail
+		}
+
+		candidate := ImageCandidate{
+			Source:    SourceVNDB,
 			URL:       image.URL,
-			Thumbnail: image.Thumbnail,
-			Width:     width,
-			Height:    height,
+			Thumbnail: thumbnail,
+			Width:     &width,
+			Height:    &height,
 		}
 
 		switch {

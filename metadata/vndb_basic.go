@@ -10,7 +10,6 @@ import (
 )
 
 type VNDBBasicInfo struct {
-	Titles      []string
 	Companies   []string
 	Year        *int
 	Description *string
@@ -25,8 +24,6 @@ type vndbBasicRequest struct {
 
 // VNDB /vn 返回的单条原始数据。
 type vndbBasicResult struct {
-	Title       string          `json:"title"`
-	AltTitle    *string         `json:"alttitle"`
 	Released    *string         `json:"released"`
 	Description *string         `json:"description"`
 	Developers  []vndbDeveloper `json:"developers"`
@@ -40,14 +37,13 @@ type vndbBasicResponse struct {
 func GetVNDBBasicInfo(vndbID string) (VNDBBasicInfo, error) {
 	result, err := queryVNDBByID(
 		vndbID,
-		"title,alttitle,released,description,developers.name",
+		"released,description,developers.name",
 	)
 	if err != nil {
 		return VNDBBasicInfo{}, err
 	}
 
 	return VNDBBasicInfo{
-		Titles:      buildTitleCandidates(result),
 		Companies:   buildCompanyCandidates(result),
 		Year:        parseVNDBYear(result.Released),
 		Description: result.Description,
@@ -111,27 +107,6 @@ func queryVNDBByID(vndbID string, fields string) (vndbBasicResult, error) {
 	return response.Results[0], nil
 }
 
-// buildTitleCandidates 把 title / alttitle 整理成标题候选。
-func buildTitleCandidates(result vndbBasicResult) []string {
-	titles := make([]string, 0, 2)
-
-	title := strings.TrimSpace(result.Title)
-
-	if title != "" {
-		titles = append(titles, title)
-	}
-
-	if result.AltTitle != nil {
-		altTitle := strings.TrimSpace(*result.AltTitle)
-
-		if altTitle != "" && altTitle != title {
-			titles = append(titles, altTitle)
-		}
-	}
-
-	return titles
-}
-
 // buildCompanyCandidates 把 developers 整理成公司候选。
 func buildCompanyCandidates(result vndbBasicResult) []string {
 	companies := make([]string, 0, len(result.Developers))
@@ -163,48 +138,6 @@ func parseVNDBYear(released *string) *int {
 	}
 
 	return &year
-}
-
-// GetVNDBTitleCandidates 根据 VNDB ID 获取标题候选。
-// 用于后续单独编辑游戏标题。
-func GetVNDBTitleCandidates(vndbID string) ([]string, error) {
-	result, err := queryVNDBByID(
-		vndbID,
-		"title,alttitle",
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return buildTitleCandidates(result), nil
-}
-
-// GetVNDBCompanyCandidates 根据 VNDB ID 获取开发商候选。
-// 用于后续单独编辑游戏公司。
-func GetVNDBCompanyCandidates(vndbID string) ([]string, error) {
-	result, err := queryVNDBByID(
-		vndbID,
-		"developers.name",
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return buildCompanyCandidates(result), nil
-}
-
-// GetVNDBYearCandidate 根据 VNDB ID 获取发行年份候选。
-// VNDB 无法确定年份时返回 nil。
-func GetVNDBYearCandidate(vndbID string) (*int, error) {
-	result, err := queryVNDBByID(
-		vndbID,
-		"released",
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return parseVNDBYear(result.Released), nil
 }
 
 // GetVNDBDescription 根据 VNDB ID 获取简介。
