@@ -13,12 +13,6 @@ type ImportService struct {
 	db *sql.DB
 }
 
-type ImportDraft struct {
-	ExecutablePath   string
-	WorkingDirectory string
-	SearchKeyword    string
-}
-
 type StartImportResult struct {
 	Status         string       `json:"status"`
 	Draft          *ImportDraft `json:"draft,omitempty"`
