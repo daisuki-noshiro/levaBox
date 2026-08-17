@@ -152,10 +152,48 @@ func buildDeveloperNames(developers []vndbDeveloper) []string {
 
 // ResolveVNDBID 根据搜索结果确定默认 VNDB 条目。
 func ResolveVNDBID(keyword string) (string, error) {
-	return "", errNotImplemented
+	keyword = strings.TrimSpace(keyword)
+	if keyword == "" {
+		return "", fmt.Errorf("VNDB 搜索关键词不能为空")
+	}
+
+	results, err := SearchVNDB(keyword)
+	if err != nil {
+		return "", err
+	}
+
+	if len(results) == 0 {
+		return "", fmt.Errorf("未找到 VNDB 条目: %s", keyword)
+	}
+
+	return results[0].ID, nil
 }
 
 // GetVNDBMetadata 获取指定 VNDB 条目的完整元数据。
 func GetVNDBMetadata(vndbID string) (Result, error) {
-	return Result{}, errNotImplemented
+	vndbID = strings.TrimSpace(vndbID)
+	if vndbID == "" {
+		return Result{}, fmt.Errorf("VNDB ID 不能为空")
+	}
+
+	basic, err := GetVNDBBasicInfo(vndbID)
+	if err != nil {
+		return Result{}, err
+	}
+
+	images, err := GetVNDBImages(vndbID)
+	if err != nil {
+		return Result{}, err
+	}
+
+	return Result{
+		Source:            SourceVNDB,
+		ExternalID:        vndbID,
+		CompanyCandidates: basic.Companies,
+		Year:              basic.Year,
+		Description:       basic.Description,
+		Tags:              nil,
+		Covers:            images.Covers,
+		Backgrounds:       images.Backgrounds,
+	}, nil
 }
