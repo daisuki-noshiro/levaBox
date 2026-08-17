@@ -1,5 +1,9 @@
 package metadata
 
+import "errors"
+
+var errNotImplemented = errors.New("暂未实现")
+
 // Source 表示元数据信息源。
 type Source string
 

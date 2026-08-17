@@ -58,6 +58,8 @@ Bangumi 第一阶段只提供 Cover，不承担 Background。
 
 ## 导入流程
 
+第一版各信息源按相关度搜索，并默认采用排序第一的条目作为匹配结果；用户可通过修改搜索词重新搜索进行纠正。
+
 ```text
 选择 EXE
 → 推测 SearchKeyword

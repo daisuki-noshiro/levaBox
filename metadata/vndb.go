@@ -149,3 +149,13 @@ func buildDeveloperNames(developers []vndbDeveloper) []string {
 
 	return companies
 }
+
+// ResolveVNDBID 根据搜索结果确定默认 VNDB 条目。
+func ResolveVNDBID(keyword string) (string, error) {
+	return "", errNotImplemented
+}
+
+// GetVNDBMetadata 获取指定 VNDB 条目的完整元数据。
+func GetVNDBMetadata(vndbID string) (Result, error) {
+	return Result{}, errNotImplemented
+}
