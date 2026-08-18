@@ -62,16 +62,41 @@ func buildBangumiCompanies(infobox []bangumiInfobox) []string {
 			continue
 		}
 
-		for _, company := range bangumiInfoboxStrings(item.Value) {
-			company = strings.TrimSpace(company)
+		for _, value := range bangumiInfoboxStrings(item.Value) {
+			for _, company := range splitBangumiCompanies(value) {
+				if seen[company] {
+					continue
+				}
 
-			if company == "" || seen[company] {
-				continue
+				seen[company] = true
+				companies = append(companies, company)
 			}
-
-			seen[company] = true
-			companies = append(companies, company)
 		}
+	}
+
+	return companies
+}
+
+// splitBangumiCompanies 将 Bangumi 中组合展示的开发商拆成独立候选。
+func splitBangumiCompanies(value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+
+	parts := strings.FieldsFunc(value, func(r rune) bool {
+		return r == '/' || r == '／'
+	})
+
+	companies := make([]string, 0, len(parts))
+
+	for _, part := range parts {
+		company := strings.TrimSpace(part)
+		if company == "" {
+			continue
+		}
+
+		companies = append(companies, company)
 	}
 
 	return companies
@@ -101,8 +126,8 @@ func bangumiInfoboxStrings(value any) []string {
 		return values
 
 	case map[string]any:
-		if value, exists := value["v"]; exists {
-			return bangumiInfoboxStrings(value)
+		if nestedValue, exists := value["v"]; exists {
+			return bangumiInfoboxStrings(nestedValue)
 		}
 	}
 
