@@ -62,9 +62,34 @@ HTTP 下载和文件准备在 transaction 前完成。Transaction 内只执行�
 
 `app.go` 暴露 `SelectExecutable`、`StartImport`、`PrepareImportMetadata` 和 `SaveImport`。该层只负责文件选择和参数转发，导入业务规则仍由 `ImportService` 负责。
 
+## 前端接入进度
+
+已接入：
+
+```text
+选择 EXE
+↓
+StartImport
+↓
+展示基础 ImportDraft
+↓
+编辑 SearchKeyword
+```
+
+尚未接入：
+
+```text
+PrepareImportMetadata
+↓
+编辑元数据
+↓
+选择 Cover / Background
+↓
+SaveImport
+```
+
 ## 当前不负责
 
-- 前端 `importService` 与 `ImportView` 联调；
 - 视频背景和 BGM；
 - 编辑已有游戏；
 - 删除游戏媒体；

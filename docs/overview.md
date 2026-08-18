@@ -40,13 +40,19 @@ levaBox 是面向 Windows 掌机和桌面环境的 Galgame 管理器。项目目
 - SaveImport 数据库事务、失败回滚和本次媒体清理；
 - 不依赖公网的 database、metadata、service 单元测试。
 
+Wails bridge 已完成。前端 `ImportView` 已接入第一段真实流程：
+
+```text
+SelectExecutable → StartImport → 展示基础 ImportDraft → 编辑 SearchKeyword
+```
+
 ## 下一阶段
 
-完整导入能力已通过 `app.go` / Wails 暴露。下一阶段将前端 `importService` 和现有导入界面接入真实后端流程。
+将基础 `ImportDraft` 传入 `PrepareImportMetadata`，并展示 VNDB / Bangumi 元数据候选。
 
 ## 暂未完成
 
-- 前端真实导入联调；
+- 前端元数据确认与最终保存流程；
 - 编辑已有游戏的完整业务；
 - 游戏启动 service；
 - 删除游戏时的本地媒体清理；
