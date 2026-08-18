@@ -10,7 +10,8 @@ import (
 var ErrGameAlreadyExists = errors.New("game already exists")
 
 type ImportService struct {
-	db *sql.DB
+	db        *sql.DB
+	mediaRoot string
 }
 
 type StartImportResult struct {
