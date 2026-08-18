@@ -2,7 +2,6 @@ package database
 
 import (
 	"database/sql"
-	"time"
 
 	"GalgameBox/model"
 )
@@ -157,40 +156,9 @@ func GetGamesByTag(db *sql.DB, tagID string) ([]model.Game, error) {
 	var games []model.Game
 
 	for rows.Next() {
-		var game model.Game
-		var backgroundType sql.NullString
-		var lastPlayedAt sql.NullInt64
-
-		err := rows.Scan(
-			&game.ID,
-			&game.Title,
-			&game.Company,
-			&game.Year,
-			&game.Description,
-			&game.CoverPath,
-			&backgroundType,
-			&game.Background.Path,
-			&game.BGMPath,
-			&game.BGMEnabled,
-			&game.Launch.ExecutablePath,
-			&game.Launch.WorkingDirectory,
-			&game.Favorite,
-			&game.Progress,
-			&game.TotalPlaySeconds,
-			&lastPlayedAt,
-		)
+		game, err := scanGame(rows)
 		if err != nil {
 			return nil, err
-		}
-
-		if backgroundType.Valid {
-			game.Background.Type =
-				model.BackgroundType(backgroundType.String)
-		}
-
-		if lastPlayedAt.Valid {
-			t := time.Unix(lastPlayedAt.Int64, 0)
-			game.LastPlayedAt = &t
 		}
 
 		games = append(games, game)

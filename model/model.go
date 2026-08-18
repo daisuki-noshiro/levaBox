@@ -28,11 +28,11 @@ type LaunchConfig struct {
 type Game struct {
 	ID     string
 	Launch LaunchConfig
-	
+
 	//基本资料
 	Title       string
 	Company     string
-	Year        int
+	Year        *int // nil 表示年份未知。
 	Description string
 
 	//媒体

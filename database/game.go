@@ -1,11 +1,72 @@
 package database
 
 import (
-	"GalgameBox/model"
 	"database/sql"
 	"path/filepath"
 	"time"
+
+	"GalgameBox/model"
 )
+
+type gameScanner interface {
+	Scan(dest ...any) error
+}
+
+// scanGame 统一把数据库中的可空字段转换为 model.Game 的空值语义。
+func scanGame(scanner gameScanner) (model.Game, error) {
+	var game model.Game
+	var company sql.NullString
+	var year sql.NullInt64
+	var description sql.NullString
+	var coverPath sql.NullString
+	var backgroundType sql.NullString
+	var backgroundPath sql.NullString
+	var bgmPath sql.NullString
+	var workingDirectory sql.NullString
+	var lastPlayedAt sql.NullInt64
+
+	err := scanner.Scan(
+		&game.ID,
+		&game.Title,
+		&company,
+		&year,
+		&description,
+		&coverPath,
+		&backgroundType,
+		&backgroundPath,
+		&bgmPath,
+		&game.BGMEnabled,
+		&game.Launch.ExecutablePath,
+		&workingDirectory,
+		&game.Favorite,
+		&game.Progress,
+		&game.TotalPlaySeconds,
+		&lastPlayedAt,
+	)
+	if err != nil {
+		return model.Game{}, err
+	}
+
+	game.Company = company.String
+	game.Description = description.String
+	game.CoverPath = coverPath.String
+	game.Background.Type = model.BackgroundType(backgroundType.String)
+	game.Background.Path = backgroundPath.String
+	game.BGMPath = bgmPath.String
+	game.Launch.WorkingDirectory = workingDirectory.String
+
+	if year.Valid {
+		value := int(year.Int64)
+		game.Year = &value
+	}
+
+	if lastPlayedAt.Valid {
+		value := time.Unix(lastPlayedAt.Int64, 0)
+		game.LastPlayedAt = &value
+	}
+
+	return game, nil
+}
 
 func InsertGame(db *sql.DB, game model.Game) error {
 	normalizedExecutablePath, err := normalizePath(game.Launch.ExecutablePath)
@@ -92,39 +153,7 @@ func GetGameByID(db *sql.DB, id string) (model.Game, error) {
 		WHERE id = ?;
 	`
 
-	var game model.Game
-	var backgroundType sql.NullString
-	var lastPlayedAt sql.NullInt64
-
-	err := db.QueryRow(query, id).Scan(
-		&game.ID,
-		&game.Title,
-		&game.Company,
-		&game.Year,
-		&game.Description,
-		&game.CoverPath,
-		&backgroundType,
-		&game.Background.Path,
-		&game.BGMPath,
-		&game.BGMEnabled,
-		&game.Launch.ExecutablePath,
-		&game.Launch.WorkingDirectory,
-		&game.Favorite,
-		&game.Progress,
-		&game.TotalPlaySeconds,
-		&lastPlayedAt,
-	)
-
-	if backgroundType.Valid {
-		game.Background.Type = model.BackgroundType(backgroundType.String)
-	}
-
-	if lastPlayedAt.Valid {
-		t := time.Unix(lastPlayedAt.Int64, 0)
-		game.LastPlayedAt = &t
-	}
-
-	return game, err
+	return scanGame(db.QueryRow(query, id))
 }
 
 func ListGames(db *sql.DB) ([]model.Game, error) {
@@ -158,39 +187,9 @@ func ListGames(db *sql.DB) ([]model.Game, error) {
 	var games []model.Game
 
 	for rows.Next() {
-		var game model.Game
-		var backgroundType sql.NullString
-		var lastPlayedAt sql.NullInt64
-
-		err := rows.Scan(
-			&game.ID,
-			&game.Title,
-			&game.Company,
-			&game.Year,
-			&game.Description,
-			&game.CoverPath,
-			&backgroundType,
-			&game.Background.Path,
-			&game.BGMPath,
-			&game.BGMEnabled,
-			&game.Launch.ExecutablePath,
-			&game.Launch.WorkingDirectory,
-			&game.Favorite,
-			&game.Progress,
-			&game.TotalPlaySeconds,
-			&lastPlayedAt,
-		)
+		game, err := scanGame(rows)
 		if err != nil {
 			return nil, err
-		}
-
-		if backgroundType.Valid {
-			game.Background.Type = model.BackgroundType(backgroundType.String)
-		}
-
-		if lastPlayedAt.Valid {
-			t := time.Unix(lastPlayedAt.Int64, 0)
-			game.LastPlayedAt = &t
 		}
 
 		games = append(games, game)
@@ -233,7 +232,7 @@ func UpdateGameCompany(db *sql.DB, gameID string, company string) error {
 }
 
 // 修改年份
-func UpdateGameYear(db *sql.DB, gameID string, year int) error {
+func UpdateGameYear(db *sql.DB, gameID string, year *int) error {
 	query := `
         UPDATE games
         SET year = ?
