@@ -38,6 +38,16 @@ CREATE TABLE IF NOT EXISTS game_tags(
                       FOREIGN KEY (tag_id) REFERENCES tags(id)
 );
 
+CREATE TABLE IF NOT EXISTS game_metadata_sources (
+                      game_id     TEXT NOT NULL,
+                      source      TEXT NOT NULL,
+                      external_id TEXT NOT NULL,
+
+                      PRIMARY KEY (game_id, source),
+
+                      FOREIGN KEY (game_id) REFERENCES games(id)
+);
+
 CREATE TABLE IF NOT EXISTS game_queue(
                       queue_type TEXT NOT NULL
                       CHECK (queue_type IN ('default', 'current')),

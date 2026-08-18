@@ -6,7 +6,7 @@ import (
 	"GalgameBox/model"
 )
 
-func InsertTag(db *sql.DB, tag model.Tag) error {
+func InsertTag(db DBTX, tag model.Tag) error {
 	query := `
 		INSERT INTO tags (
 			id,
@@ -24,7 +24,7 @@ func InsertTag(db *sql.DB, tag model.Tag) error {
 	return err
 }
 
-func GetTagByName(db *sql.DB, name string) (model.Tag, bool, error) {
+func GetTagByName(db DBTX, name string) (model.Tag, bool, error) {
 	query := `
 		SELECT
 			id,
@@ -52,7 +52,7 @@ func GetTagByName(db *sql.DB, name string) (model.Tag, bool, error) {
 	return tag, true, nil
 }
 
-func AddGameTag(db *sql.DB, gameID string, tagID string) error {
+func AddGameTag(db DBTX, gameID string, tagID string) error {
 	query := `
 		INSERT OR IGNORE INTO game_tags (
 			game_id,

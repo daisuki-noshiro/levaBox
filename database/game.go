@@ -68,7 +68,7 @@ func scanGame(scanner gameScanner) (model.Game, error) {
 	return game, nil
 }
 
-func InsertGame(db *sql.DB, game model.Game) error {
+func InsertGame(db DBTX, game model.Game) error {
 	normalizedExecutablePath, err := normalizePath(game.Launch.ExecutablePath)
 	if err != nil {
 		return err

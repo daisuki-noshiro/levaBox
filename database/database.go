@@ -12,6 +12,14 @@ import (
 //go:embed schema.sql
 var schemaSQL string
 
+// DBTX 表示数据库写操作所需的最小能力。
+// *sql.DB 与 *sql.Tx 都能实现，使 helper 同时支持普通调用和事务调用。
+type DBTX interface {
+	Exec(query string, args ...any) (sql.Result, error)
+	Query(query string, args ...any) (*sql.Rows, error)
+	QueryRow(query string, args ...any) *sql.Row
+}
+
 func Open() (*sql.DB, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
