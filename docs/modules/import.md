@@ -58,9 +58,13 @@ Game + Tags + MetadataSources + 本地媒体
 
 HTTP 下载和文件准备在 transaction 前完成。Transaction 内只执行数据库操作，以避免网络等待期间长期持有事务。
 
+## Wails 暴露层
+
+`app.go` 暴露 `SelectExecutable`、`StartImport`、`PrepareImportMetadata` 和 `SaveImport`。该层只负责文件选择和参数转发，导入业务规则仍由 `ImportService` 负责。
+
 ## 当前不负责
 
-- 前端交互与 Wails 完整接入；
+- 前端 `importService` 与 `ImportView` 联调；
 - 视频背景和 BGM；
 - 编辑已有游戏；
 - 删除游戏媒体；

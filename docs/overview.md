@@ -42,7 +42,7 @@ levaBox 是面向 Windows 掌机和桌面环境的 Galgame 管理器。项目目
 
 ## 下一阶段
 
-通过 `app.go` / Wails 暴露完整导入能力，将现有前端导入界面接入真实后端流程。
+完整导入能力已通过 `app.go` / Wails 暴露。下一阶段将前端 `importService` 和现有导入界面接入真实后端流程。
 
 ## 暂未完成
 

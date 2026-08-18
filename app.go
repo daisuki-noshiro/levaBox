@@ -1,11 +1,17 @@
 package main
 
 import (
-	"GalgameBox/database"
-	"GalgameBox/service"
 	"context"
 	"database/sql"
+	"errors"
 	"log"
+
+	"GalgameBox/database"
+	"GalgameBox/metadata"
+	"GalgameBox/model"
+	"GalgameBox/service"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App struct
@@ -44,6 +50,57 @@ func (a *App) shutdown(ctx context.Context) {
 	}
 }
 
+// SelectExecutable 打开系统文件选择窗口并返回用户选择的 EXE。
+func (a *App) SelectExecutable() (string, error) {
+	if a == nil || a.ctx == nil {
+		return "", errors.New("应用上下文未初始化")
+	}
+
+	return runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "选择游戏可执行文件",
+		Filters: []runtime.FileFilter{
+			{
+				DisplayName: "Windows 可执行文件 (*.exe)",
+				Pattern:     "*.exe",
+			},
+		},
+	})
+}
+
 func (a *App) StartImport(executablePath string) (service.StartImportResult, error) {
-	return a.importService.StartImport(executablePath)
+	importService, err := a.requireImportService()
+	if err != nil {
+		return service.StartImportResult{}, err
+	}
+
+	return importService.StartImport(executablePath)
+}
+
+func (a *App) PrepareImportMetadata(
+	draft service.ImportDraft,
+	sources []metadata.Source,
+) (service.ImportMetadataResult, error) {
+	importService, err := a.requireImportService()
+	if err != nil {
+		return service.ImportMetadataResult{}, err
+	}
+
+	return importService.PrepareImportMetadata(draft, sources)
+}
+
+func (a *App) SaveImport(request service.SaveImportRequest) (model.Game, error) {
+	importService, err := a.requireImportService()
+	if err != nil {
+		return model.Game{}, err
+	}
+
+	return importService.SaveImport(request)
+}
+
+func (a *App) requireImportService() (*service.ImportService, error) {
+	if a == nil || a.importService == nil {
+		return nil, errors.New("导入服务未初始化")
+	}
+
+	return a.importService, nil
 }
