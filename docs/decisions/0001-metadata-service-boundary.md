@@ -5,9 +5,9 @@
 
 ## 背景
 
-levaBox 计划从 VNDB、Bangumi 等外部数据源获取游戏资料。
+levaBox 从 VNDB、Bangumi 等外部数据源获取游戏资料。
 
-早期设计中曾考虑在 `ImportService` 中直接接入 VNDB 搜索和详情查询。但当前只有 VNDB 已实际接入，Bangumi 尚未实现，如果过早围绕 VNDB 设计完整导入流程，后续可能使 service 与某个具体数据源耦合。
+早期设计中曾考虑在 `ImportService` 中直接接入 VNDB 搜索和详情查询。作出本决定时只有 VNDB 已实际接入；如果围绕单一来源设计完整导入流程，后续会使 service 与具体数据源耦合。
 
 同时，导入和后续资料编辑都会使用元数据查询能力，因此元数据查询本身不属于导入流程专用能力。
 
@@ -50,8 +50,8 @@ levaBox 计划从 VNDB、Bangumi 等外部数据源获取游戏资料。
 3. 新增数据源时不需要把数据源专用逻辑塞进 ImportService；
 4. 在两个真实数据源都实现前，不必猜测它们应该如何统一。
 
-## 影响
+## 当前结果
 
-当前阶段先完成 `metadata` 中的 VNDB 和 Bangumi 能力，再回到 `service` 设计多数据源的组合、选择和编辑流程。
+VNDB 与 Bangumi v1 均已接入并输出统一 `metadata.Result`。`service` 使用轻量 handler registry 编排来源，并负责字段优先级、候选合并和失败隔离。
 
-暂不引入通用 `MetadataProvider` interface。是否需要统一接口，待 Bangumi 实现后根据实际重复和差异决定。
+当前实际重复不足以支持复杂 Provider 抽象，因此仍不引入通用 `MetadataProvider` interface。

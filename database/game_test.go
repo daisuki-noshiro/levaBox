@@ -2,7 +2,9 @@ package database
 
 import (
 	"database/sql"
+	"errors"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"GalgameBox/model"
@@ -214,5 +216,100 @@ func TestUpdateGameYearCanSetAndClear(t *testing.T) {
 	}
 	if savedGame.Year != nil {
 		t.Fatalf("Year = %v after clearing, want nil", savedGame.Year)
+	}
+}
+
+func TestDeleteGameRemovesRelationsAndKeepsSharedTag(t *testing.T) {
+	db := openTestDatabase(t)
+	deletedGame := newTestGame(t, "delete-game")
+	remainingGame := newTestGame(t, "remaining-game")
+	sharedTag := model.Tag{ID: "shared-tag", Name: "Key"}
+
+	for _, game := range []model.Game{deletedGame, remainingGame} {
+		if err := InsertGame(db, game); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := InsertTag(db, sharedTag); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, game := range []model.Game{deletedGame, remainingGame} {
+		if err := AddGameTag(db, game.ID, sharedTag.ID); err != nil {
+			t.Fatal(err)
+		}
+		if err := InsertGameMetadataSource(db, model.GameMetadataSource{
+			GameID:     game.ID,
+			Source:     "vndb",
+			ExternalID: "v20424",
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := AppendGameToLobby(db, game.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := DeleteGame(db, deletedGame.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := GetGameByID(db, deletedGame.ID); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("GetGameByID error = %v, want sql.ErrNoRows", err)
+	}
+	if _, err := GetGameByID(db, remainingGame.ID); err != nil {
+		t.Fatalf("remaining game was affected: %v", err)
+	}
+
+	deletedTags, err := GetGameTags(db, deletedGame.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(deletedTags) != 0 {
+		t.Fatalf("deleted game tags = %#v, want none", deletedTags)
+	}
+	remainingTags, err := GetGameTags(db, remainingGame.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(remainingTags, []model.Tag{sharedTag}) {
+		t.Fatalf("remaining game tags = %#v, want %#v", remainingTags, []model.Tag{sharedTag})
+	}
+
+	deletedSources, err := GetGameMetadataSources(db, deletedGame.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(deletedSources) != 0 {
+		t.Fatalf("deleted metadata sources = %#v, want none", deletedSources)
+	}
+	remainingSources, err := GetGameMetadataSources(db, remainingGame.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(remainingSources) != 1 {
+		t.Fatalf("remaining metadata sources = %#v", remainingSources)
+	}
+
+	defaultQueue, err := GetDefaultQueue(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	currentQueue, err := GetCurrentQueue(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantQueue := []string{remainingGame.ID}
+	if !reflect.DeepEqual(defaultQueue, wantQueue) || !reflect.DeepEqual(currentQueue, wantQueue) {
+		t.Fatalf("queues = %v/%v, want %v", defaultQueue, currentQueue, wantQueue)
+	}
+
+	savedTag, exists, err := GetTagByName(db, sharedTag.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !exists || savedTag != sharedTag {
+		t.Fatalf("shared tag = %#v, exists = %v", savedTag, exists)
 	}
 }

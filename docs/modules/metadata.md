@@ -2,79 +2,49 @@
 
 ## 职责
 
-`metadata` 负责查询外部信息源并将结果规范化，不决定最终采用的数据。`service` 负责合并候选、形成导入草稿和处理最终选择。
-
-第一阶段信息源：
+`metadata` 查询外部信息源并规范化结果，不决定最终采用值。当前 v1 信息源为：
 
 - VNDB
 - Bangumi
 
-当前不引入复杂的 Provider 抽象。
+两者由 `service` 的轻量 handler registry 注册，不引入复杂 Provider 接口。
 
 ## 公共结构
 
-`metadata/types.go` 定义公共结构：
+`metadata.Result` 是单个来源的统一输出，包含：
 
-- `Source`：信息源标识。
-- `ImageCandidate`：图片候选，包含 `Source`、`URL`、`Thumbnail`、`Width`、`Height`。
-- `Result`：单个信息源能够提供的原材料。
-
-`Result` 包含：
-
-- `Source`
-- `ExternalID`
+- `Source`、`ExternalID`
 - `CompanyCandidates`
-- `Year`
-- `Description`
+- 可空的 `Year`、`Description`
 - `Tags`
-- `Covers`
-- `Backgrounds`
+- `Covers`、`Backgrounds`
 
-`Result` 不包含 Title。用户最终确认的搜索词默认作为 `Game.Title`，metadata 不提供或决定最终 Title。
+`ImageCandidate` 保存候选图片的来源、URL、缩略图和可选尺寸。
 
-Company 以候选数组返回，最终值由 service 和用户确认。Year、Description 在来源无数据时允许为 `nil`。
+`Result` 不包含 Title。最终 Title 使用用户确认的 SearchKeyword，由 `service` 形成。
 
-## Tag
+## 来源能力
 
-第一阶段只使用：
+- VNDB：公司、年份、简介、Cover 和 Background 候选；当前不采用 VNDB Tag。
+- Bangumi：公司、年份、简介、Tag 和 Cover 候选；v1 不提供 Background。
 
-- Bangumi Tag
-- 用户手动输入或本地已有 Tag
+VNDB `dig` 图片按尺寸分类：竖图为 Cover，横图为 Background，正方形忽略。
 
-不采用 VNDB Tag。Title、Company、Year、Tag 入库后直接在本地编辑。
+## service 合并规则
 
-## 图片候选
+以下是业务规则，不属于 `metadata` 自身职责：
 
-候选界面后续展示信息源和原始分辨率，`ImageCandidate` 使用 `Source`、`URL`、`Thumbnail`、`Width`、`Height` 表达所需信息。
+- VNDB Year 优先，无值时按结果顺序回退；
+- Bangumi Description 优先，无值时按结果顺序回退；
+- Company 只在提供公司的来源存在共同候选时自动采用；
+- Tags 忽略大小写去重并保持首次出现顺序；
+- Cover、Background 按来源和来源内部顺序合并并按 URL 去重；
+- 单一来源失败记录为 `MetadataSourceIssue`，不阻止其他来源形成 `ImportDraft`。
 
-VNDB 图片规则：
+## 外部条目关联
 
-- 从 `/release` 查询 `images.type == dig` 的图片。
-- 竖图作为 Cover 候选。
-- 横图作为 Background 候选。
-- 正方形图片忽略。
+成功结果中的 `Result.Source + ExternalID` 经 `service.ResolvedSource` 进入 `SaveImport`，最终保存到 `game_metadata_sources`。具体导入事务见 [import.md](./import.md)。
 
-Bangumi 第一阶段只提供 Cover，不承担 Background。
+## 边界
 
-## 导入流程
-
-第一版各信息源按相关度搜索，并默认采用排序第一的条目作为匹配结果；用户可通过修改搜索词重新搜索进行纠正。
-
-```text
-选择 EXE
-→ 推测 SearchKeyword
-→ 用户可修改搜索词
-→ 查询启用的信息源
-→ metadata 分别得到 Result
-→ service 整理为 ImportDraft
-→ 用户确认
-→ 保存
-```
-
-入库后的 metadata 在线重新获取只计划用于：
-
-- Description
-- Cover
-- Background
-
-Title、Company、Year、Tag 直接在本地编辑。
+`metadata` 不负责用户最终选择、`Game` 构造、数据库写入或来源间优先级。入库后的在线刷新尚未实现。

@@ -449,6 +449,15 @@ func DeleteGame(db *sql.DB, gameID string) error {
 	}
 
 	_, err = tx.Exec(`
+		DELETE FROM game_metadata_sources
+		WHERE game_id = ?;
+	`, gameID)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	_, err = tx.Exec(`
 		DELETE FROM games
 		WHERE id = ?;
 	`, gameID)

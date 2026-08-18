@@ -1,88 +1,69 @@
 # levaBox 项目总览
 
-## 1. 项目定位
+## 项目定位
 
-levaBox 是一个面向 Windows 掌机和桌面环境的 Galgame 管理器，技术栈为 Go + Wails + Vue。
+levaBox 是面向 Windows 掌机和桌面环境的 Galgame 管理器。项目目标是形成可实际使用的软件，同时以真实需求推进后端数据建模、模块划分、持久化、第三方 API、文件与进程管理。
 
-项目有两个目标：
-
-- 做成实际可用的软件，而不是只完成演示功能；
-- 作为后端工程学习项目，逐步练习需求分析、数据建模、模块划分、持久化、第三方 API、文件与进程管理等能力。
-
-当前开发顺序：
-
-> 需求 → 数据 → 业务规则 → 模块职责 → 接口 → 实现
-
-后端设计不以“某个 API 能返回什么”或“前端已经有什么页面”为起点。
-
-## 2. 技术栈
+## 技术栈
 
 - 后端：Go
 - 桌面框架：Wails
 - 前端：Vue + TypeScript
 - 数据库：SQLite
-- 外部元数据：VNDB；Bangumi 计划接入，尚未实现
+- 元数据源：VNDB v1、Bangumi v1
 
-## 3. 主要模块
+## 主要模块
 
 | 模块 | 主要职责 |
 | --- | --- |
-| `model` | levaBox 核心领域数据，例如 `Game`、`Tag`、`Background` |
-| `database` | SQLite 表结构及持久化操作 |
-| `metadata` | 查询 VNDB、Bangumi 等外部数据源并整理候选数据 |
-| `service` | 导入、编辑、启动等业务流程与业务规则 |
-| `app.go` | Wails 暴露层，连接前端与后端服务 |
-| `frontend` | 页面、交互、展示和用户选择 |
+| `model` | `Game`、`Tag`、`GameMetadataSource` 等核心数据 |
+| `database` | SQLite schema、基础持久化与事务 helper |
+| `metadata` | 查询 VNDB、Bangumi 并输出统一候选数据 |
+| `service` | 导入等业务流程、字段合并和事务编排 |
+| `app.go` | Wails 暴露层，连接前端与 service |
+| `frontend` | 页面、交互、展示和用户确认 |
 
-模块边界见 [architecture.md](./architecture.md)。
+模块边界见 [architecture.md](./architecture.md)，导入设计见 [modules/import.md](./modules/import.md)。
 
-## 4. 当前阶段
+## 当前状态
 
-### 已完成或已具备
+后端“游戏导入”主链 v1 已基本完成，包括：
 
-- `Game`、`Tag`、`Background`、`LaunchConfig` 等核心模型已建立；
-- SQLite 的游戏、标签和队列表结构已建立；
-- `StartImport` 已具备 EXE 查重、路径规范化、工作目录和默认搜索词生成能力；
-- VNDB 按游戏名搜索已可用；
-- VNDB 基础信息查询已可用，可按 VNDB ID 获取标题、开发商、年份和简介；
-- VNDB 基础信息支持按字段用途单独查询；
-- 已使用 Summer Pockets（`v20424`）进行 VNDB 联网测试。
+- `Game`、`Tag`、队列和元数据来源模型；
+- Game、Tag、`game_tags`、`game_queue`、`game_metadata_sources` 的 SQLite 持久化；
+- `StartImport` 的 EXE 查重、路径处理、工作目录和默认搜索词；
+- VNDB、Bangumi v1 查询及统一 `metadata.Result`；
+- 多来源查询、失败来源 `Issues` 隔离和 `ImportDraft` 合并；
+- `SaveImport` 的最终校验、再次查重和 `model.Game` 构造；
+- Cover、Background 下载到本地媒体目录；
+- Tag 复用/新增、`game_tags` 和 MetadataSource 保存；
+- SaveImport 数据库事务、失败回滚和本次媒体清理；
+- 不依赖公网的 database、metadata、service 单元测试。
 
-### 正在进行
+## 下一阶段
 
-当前重点是完成 `metadata` 层的 VNDB 能力，并稳定数据源层的职责边界。
+通过 `app.go` / Wails 暴露完整导入能力，将现有前端导入界面接入真实后端流程。
 
-计划顺序：
+## 暂未完成
 
-1. VNDB 基础信息；
-2. VNDB Tag；
-3. VNDB 图片；
-4. Bangumi 元数据；
-5. 两个真实数据源都明确后，再设计 `service` 如何组合、选择和编辑候选数据。
+- 前端真实导入联调；
+- 编辑已有游戏的完整业务；
+- 游戏启动 service；
+- 删除游戏时的本地媒体清理；
+- metadata 在线刷新；
+- Settings、BGM 等后续能力。
 
-### 暂未完成
+## 当前约束
 
-- Bangumi 接入；
-- VNDB Tag 正式实现；
-- VNDB `dig` 图片正式实现；
-- 外部数据源条目 ID 的持久化方案；
-- 导入流程与 metadata 的完整业务编排；
-- 用户确认后的最终导入、图片下载和数据库写入；
-- 游戏启动、游玩时间记录等完整业务流程。
-
-## 5. 当前约束
-
-- `metadata` 只负责查询和整理外部数据，不决定用户最终采用什么；
-- `service` 负责导入、编辑、字段选择和多个数据源之间的业务组合；
-- `model.Game` 不直接依赖 VNDB、Bangumi 的 API 数据结构；
-- 外部图片 URL 只作为候选数据，最终使用的图片应下载到本地并保存本地路径；
+- `metadata` 只查询和规范化外部数据，不决定最终采用值；
+- `service` 负责多来源业务规则、用户确认结果和事务编排；
+- `model.Game` 不依赖第三方 API 原始结构；
+- 最终采用的远程图片必须下载为本地文件；
 - 前端负责交互和展示，不承担核心业务规则。
 
-## 6. 文档约定
+## 文档约定
 
 - `overview.md`：项目状态和总体范围；
 - `architecture.md`：系统分层和模块边界；
-- `modules/*.md`：具体模块的业务设计与接口意图；
+- `modules/*.md`：具体模块的设计；
 - `decisions/*.md`：重要设计决定及原因。
-
-文档记录设计意图和约束，不重复解释代码中已经清楚表达的实现细节。
