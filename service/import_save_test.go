@@ -185,7 +185,7 @@ func TestSaveImportCompleteSuccess(t *testing.T) {
 }
 
 func TestSaveImportWithoutMedia(t *testing.T) {
-	service, _, mediaRoot := newSaveImportTestService(t)
+	service, db, mediaRoot := newSaveImportTestService(t)
 	request := newSaveImportRequest(t)
 
 	game, err := service.SaveImport(request)
@@ -204,6 +204,34 @@ func TestSaveImportWithoutMedia(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(mediaRoot, game.ID)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("empty media directory should not exist; error = %v", err)
+	}
+
+	tags, err := database.GetGameTags(db, game.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tags) != 0 {
+		t.Fatalf("tags = %#v, want none", tags)
+	}
+
+	sources, err := database.GetGameMetadataSources(db, game.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sources) != 0 {
+		t.Fatalf("metadata sources = %#v, want none", sources)
+	}
+
+	defaultQueue, err := database.GetDefaultQueue(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	currentQueue, err := database.GetCurrentQueue(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(defaultQueue) != 0 || len(currentQueue) != 0 {
+		t.Fatalf("queues = %v/%v, want empty", defaultQueue, currentQueue)
 	}
 }
 

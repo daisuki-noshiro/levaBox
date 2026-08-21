@@ -80,11 +80,7 @@ PrepareImportMetadata
 元数据编辑
 ↓
 候选图片选择
-```
-
-尚未接入：
-
-```text
+↓
 最终 Tag 选择/编辑
 ↓
 SaveImportRequest
@@ -94,7 +90,19 @@ SaveImport
 导入完成
 ```
 
+尚未接入：
+
+```text
+游戏库读取与刷新
+游戏启动
+已有游戏编辑
+```
+
 `ImportMetadataResult.Issues` 只表示单个来源查询失败。页面会保留并展示其他来源成功形成的草稿和候选结果，同时以轻量警告列出失败来源；只有 Wails Promise reject 才视为整次查询错误。
+
+前端默认不选择任何 Tag，用户可从候选中选择或添加忽略大小写去重的自定义 Tag。Cover 与 Background 均允许为空。保存成功后导入页清空当前状态并显示成功信息；失败时保留草稿和全部选择以便重试。
+
+`SaveImport` 成功只创建 Game 及其 Tag、MetadataSource 和本地媒体关系，不写入 `game_queue`，也不自动加入游戏大厅。
 
 ## 当前不负责
 
