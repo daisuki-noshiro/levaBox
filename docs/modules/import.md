@@ -74,19 +74,27 @@ StartImport
 展示基础 ImportDraft
 ↓
 编辑 SearchKeyword
+↓
+PrepareImportMetadata
+↓
+元数据编辑
+↓
+候选图片选择
 ```
 
 尚未接入：
 
 ```text
-PrepareImportMetadata
+最终 Tag 选择/编辑
 ↓
-编辑元数据
-↓
-选择 Cover / Background
+SaveImportRequest
 ↓
 SaveImport
+↓
+导入完成
 ```
+
+`ImportMetadataResult.Issues` 只表示单个来源查询失败。页面会保留并展示其他来源成功形成的草稿和候选结果，同时以轻量警告列出失败来源；只有 Wails Promise reject 才视为整次查询错误。
 
 ## 当前不负责
 

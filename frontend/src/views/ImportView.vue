@@ -1,16 +1,32 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 
-import { selectExecutable, startImport } from '../services/importService'
+import {
+  prepareImportMetadata,
+  selectExecutable,
+  startImport,
+} from '../services/importService'
+import { metadata } from '../../wailsjs/go/models'
 import type { service } from '../../wailsjs/go/models'
 
 const emit = defineEmits<{ notify: [message: string] }>()
 
 const draft = ref<service.ImportDraft | null>(null)
 const loading = ref(false)
+const metadataLoading = ref(false)
+const metadataQueried = ref(false)
 const errorMessage = ref('')
 const alreadyExists = ref(false)
 const existingGameId = ref('')
+const issues = ref<service.MetadataSourceIssue[]>([])
+const selectedCover = ref<metadata.ImageCandidate | null>(null)
+const selectedBackground = ref<metadata.ImageCandidate | null>(null)
+const failedImages = ref<Set<string>>(new Set())
+
+const metadataSources: metadata.Source[] = [
+  metadata.Source.VNDB,
+  metadata.Source.Bangumi,
+]
 
 const actions = [
   { icon: '▣', title: '扫描文件夹', description: '选择一个目录，自动寻找可能的游戏程序。', action: '扫描文件夹', developing: true },
@@ -24,6 +40,65 @@ function errorReason(error: unknown): string {
 
 function notifyDeveloping(title: string): void {
   emit('notify', `${title}功能正在开发中`)
+}
+
+function resetMetadataState(): void {
+  metadataQueried.value = false
+  issues.value = []
+  selectedCover.value = null
+  selectedBackground.value = null
+  failedImages.value = new Set()
+}
+
+function sourceLabel(source: metadata.Source): string {
+  if (source === metadata.Source.VNDB) return 'VNDB'
+  if (source === metadata.Source.Bangumi) return 'Bangumi'
+  return source
+}
+
+function imageSource(candidate: metadata.ImageCandidate): string {
+  return candidate.Thumbnail?.trim() || candidate.URL
+}
+
+function imageResolution(candidate: metadata.ImageCandidate): string {
+  return candidate.Width !== undefined && candidate.Height !== undefined
+    ? `${candidate.Width} × ${candidate.Height}`
+    : '分辨率未知'
+}
+
+function isSelected(
+  candidate: metadata.ImageCandidate,
+  selected: metadata.ImageCandidate | null,
+): boolean {
+  return selected?.URL === candidate.URL
+}
+
+function handleImageError(
+  event: Event,
+  candidate: metadata.ImageCandidate,
+): void {
+  const image = event.currentTarget as HTMLImageElement
+  if (candidate.Thumbnail && image.dataset.fallbackApplied !== 'true') {
+    image.dataset.fallbackApplied = 'true'
+    image.src = candidate.URL
+    return
+  }
+
+  const next = new Set(failedImages.value)
+  next.add(candidate.URL)
+  failedImages.value = next
+}
+
+function updateYear(event: Event): void {
+  if (!draft.value) return
+  const value = (event.target as HTMLInputElement).value
+  draft.value.Year = value === '' ? undefined : Number(value)
+}
+
+function updateDescription(event: Event): void {
+  if (!draft.value) return
+  const value = (event.target as HTMLTextAreaElement).value
+  draft.value.Description = value === '' ? undefined : value
 }
 
 async function handleSelectExecutable(): Promise<void> {
@@ -44,6 +119,7 @@ async function handleSelectExecutable(): Promise<void> {
     if (!executablePath) return
 
     draft.value = null
+    resetMetadataState()
     alreadyExists.value = false
     existingGameId.value = ''
 
@@ -73,6 +149,27 @@ async function handleSelectExecutable(): Promise<void> {
     loading.value = false
   }
 }
+
+async function handlePrepareMetadata(): Promise<void> {
+  if (!draft.value || metadataLoading.value) return
+
+  metadataLoading.value = true
+  errorMessage.value = ''
+
+  try {
+    const result = await prepareImportMetadata(draft.value, metadataSources)
+    draft.value = result.Draft
+    issues.value = result.Issues ?? []
+    selectedCover.value = null
+    selectedBackground.value = null
+    failedImages.value = new Set()
+    metadataQueried.value = true
+  } catch (error) {
+    errorMessage.value = `查询游戏资料失败：${errorReason(error)}`
+  } finally {
+    metadataLoading.value = false
+  }
+}
 </script>
 
 <template>
@@ -98,23 +195,116 @@ async function handleSelectExecutable(): Promise<void> {
       <div class="import-view__result-body">
         <p v-if="errorMessage" class="import-view__message import-view__message--error" role="alert">{{ errorMessage }}</p>
 
-        <div v-if="draft" class="import-draft">
-          <label class="import-draft__field import-draft__field--wide">
-            <span>启动程序</span>
-            <input :value="draft.ExecutablePath" type="text" readonly />
-          </label>
-          <label class="import-draft__field import-draft__field--wide">
-            <span>工作目录</span>
-            <input :value="draft.WorkingDirectory" type="text" readonly />
-          </label>
-          <label class="import-draft__field">
-            <span>搜索关键词</span>
-            <input v-model="draft.SearchKeyword" type="text" autocomplete="off" />
-          </label>
-          <label class="import-draft__field">
-            <span>标题</span>
-            <input v-model="draft.Title" type="text" autocomplete="off" />
-          </label>
+        <div v-if="draft" class="import-workspace">
+          <div class="import-draft">
+            <label class="import-draft__field import-draft__field--wide">
+              <span>启动程序</span>
+              <input :value="draft.ExecutablePath" type="text" readonly />
+            </label>
+            <label class="import-draft__field import-draft__field--wide">
+              <span>工作目录</span>
+              <input :value="draft.WorkingDirectory" type="text" readonly />
+            </label>
+            <label class="import-draft__field">
+              <span>搜索关键词</span>
+              <input v-model="draft.SearchKeyword" type="text" autocomplete="off" />
+            </label>
+            <label class="import-draft__field">
+              <span>标题</span>
+              <input v-model="draft.Title" type="text" autocomplete="off" />
+            </label>
+
+            <template v-if="metadataQueried">
+              <label class="import-draft__field">
+                <span>开发商</span>
+                <input v-model="draft.Company" type="text" autocomplete="off" />
+              </label>
+              <label class="import-draft__field">
+                <span>年份</span>
+                <input :value="draft.Year ?? ''" type="number" inputmode="numeric" @input="updateYear" />
+              </label>
+              <label class="import-draft__field import-draft__field--wide">
+                <span>简介</span>
+                <textarea :value="draft.Description ?? ''" rows="6" @input="updateDescription"></textarea>
+              </label>
+            </template>
+
+            <div class="import-query import-draft__field--wide">
+              <button
+                type="button"
+                :disabled="metadataLoading || !draft.SearchKeyword.trim()"
+                @click="handlePrepareMetadata"
+              >
+                {{ metadataLoading ? '正在查询...' : metadataQueried ? '重新查询资料' : '查询游戏资料' }}
+              </button>
+              <p>使用当前搜索关键词查询 VNDB 和 Bangumi，不会自动保存到游戏库。</p>
+            </div>
+          </div>
+
+          <section v-if="issues.length" class="metadata-issues" aria-label="来源查询警告">
+            <div><strong>部分来源查询失败</strong><span>其他来源的结果仍已保留。</span></div>
+            <ul>
+              <li v-for="(issue, index) in issues" :key="`${issue.Source}-${index}`">
+                <strong>{{ sourceLabel(issue.Source) }}</strong>：{{ issue.Message }}
+              </li>
+            </ul>
+          </section>
+
+          <div v-if="metadataQueried" class="metadata-results">
+            <section class="metadata-panel">
+              <div class="metadata-panel__title"><div><h3>标签候选</h3><p>来自已成功查询的信息源，仅供下一阶段确认。</p></div><span>{{ draft.TagCandidates?.length ?? 0 }}</span></div>
+              <div v-if="draft.TagCandidates?.length" class="tag-candidates">
+                <span v-for="tag in draft.TagCandidates" :key="tag">{{ tag }}</span>
+              </div>
+              <p v-else class="metadata-panel__empty">暂无标签候选</p>
+            </section>
+
+            <section class="metadata-panel">
+              <div class="metadata-panel__title"><div><h3>封面候选</h3><p>可选择一张封面，也可以不使用封面。</p></div><button type="button" :class="{ 'selection-clear--active': selectedCover === null }" @click="selectedCover = null">不使用封面</button></div>
+              <div v-if="draft.CoverCandidates?.length" class="image-candidates image-candidates--cover">
+                <button
+                  v-for="candidate in draft.CoverCandidates"
+                  :key="candidate.URL"
+                  type="button"
+                  class="image-candidate image-candidate--cover"
+                  :class="{ 'image-candidate--selected': isSelected(candidate, selectedCover) }"
+                  :aria-pressed="isSelected(candidate, selectedCover)"
+                  @click="selectedCover = candidate"
+                >
+                  <span class="image-candidate__preview">
+                    <img v-if="!failedImages.has(candidate.URL)" :src="imageSource(candidate)" :alt="`${sourceLabel(candidate.Source)} 封面候选`" loading="lazy" @error="handleImageError($event, candidate)" />
+                    <span v-else class="image-candidate__fallback">图片加载失败</span>
+                    <i v-if="isSelected(candidate, selectedCover)">✓</i>
+                  </span>
+                  <span class="image-candidate__meta"><strong>{{ sourceLabel(candidate.Source) }}</strong><small>{{ imageResolution(candidate) }}</small></span>
+                </button>
+              </div>
+              <p v-else class="metadata-panel__empty">暂无封面候选</p>
+            </section>
+
+            <section class="metadata-panel">
+              <div class="metadata-panel__title"><div><h3>背景候选</h3><p>可选择一张横向背景，也可以不使用背景。</p></div><button type="button" :class="{ 'selection-clear--active': selectedBackground === null }" @click="selectedBackground = null">不使用背景</button></div>
+              <div v-if="draft.BackgroundCandidates?.length" class="image-candidates image-candidates--background">
+                <button
+                  v-for="candidate in draft.BackgroundCandidates"
+                  :key="candidate.URL"
+                  type="button"
+                  class="image-candidate image-candidate--background"
+                  :class="{ 'image-candidate--selected': isSelected(candidate, selectedBackground) }"
+                  :aria-pressed="isSelected(candidate, selectedBackground)"
+                  @click="selectedBackground = candidate"
+                >
+                  <span class="image-candidate__preview">
+                    <img v-if="!failedImages.has(candidate.URL)" :src="imageSource(candidate)" :alt="`${sourceLabel(candidate.Source)} 背景候选`" loading="lazy" @error="handleImageError($event, candidate)" />
+                    <span v-else class="image-candidate__fallback">图片加载失败</span>
+                    <i v-if="isSelected(candidate, selectedBackground)">✓</i>
+                  </span>
+                  <span class="image-candidate__meta"><strong>{{ sourceLabel(candidate.Source) }}</strong><small>{{ imageResolution(candidate) }}</small></span>
+                </button>
+              </div>
+              <p v-else class="metadata-panel__empty">暂无背景候选</p>
+            </section>
+          </div>
         </div>
 
         <div v-else-if="alreadyExists" class="import-view__existing">
@@ -152,12 +342,51 @@ async function handleSelectExecutable(): Promise<void> {
 .import-view__result-body { padding: 24px; }
 .import-view__message { margin: 0 0 18px; padding: 12px 14px; border-radius: 12px; font-size: .8rem; line-height: 1.5; }
 .import-view__message--error { border: 1px solid rgba(255, 132, 132, .28); color: #ffc3c3; background: rgba(176, 55, 55, .12); }
+.import-workspace { display: grid; gap: 22px; }
 .import-draft { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .import-draft__field { display: grid; gap: 8px; min-width: 0; color: #b8c7d9; font-size: .76rem; }
 .import-draft__field--wide { grid-column: 1 / -1; }
-.import-draft__field input { width: 100%; min-width: 0; height: 44px; padding: 0 13px; border: 1px solid rgba(255, 255, 255, .11); border-radius: 11px; outline: 0; color: #f4f8fd; background: rgba(255, 255, 255, .055); }
-.import-draft__field input:not([readonly]):focus { border-color: rgba(117, 222, 255, .55); box-shadow: 0 0 0 3px rgba(117, 222, 255, .08); }
+.import-draft__field input, .import-draft__field textarea { width: 100%; min-width: 0; padding: 0 13px; border: 1px solid rgba(255, 255, 255, .11); border-radius: 11px; outline: 0; color: #f4f8fd; background: rgba(255, 255, 255, .055); font: inherit; }
+.import-draft__field input { height: 44px; }
+.import-draft__field textarea { padding-top: 11px; padding-bottom: 11px; resize: vertical; line-height: 1.55; }
+.import-draft__field input:not([readonly]):focus, .import-draft__field textarea:focus { border-color: rgba(117, 222, 255, .55); box-shadow: 0 0 0 3px rgba(117, 222, 255, .08); }
 .import-draft__field input[readonly] { color: #9caabd; cursor: default; }
+.import-query { display: flex; align-items: center; gap: 14px; padding-top: 2px; }
+.import-query button { flex: 0 0 auto; min-height: 44px; padding: 0 18px; border: 1px solid rgba(117, 222, 255, .32); border-radius: 11px; color: #dff8ff; background: rgba(74, 177, 219, .13); cursor: pointer; }
+.import-query button:hover:not(:disabled) { border-color: rgba(117, 222, 255, .58); background: rgba(74, 177, 219, .2); }
+.import-query button:disabled { opacity: .55; cursor: wait; }
+.import-query p { margin: 0; color: var(--muted); font-size: .73rem; line-height: 1.5; }
+.metadata-issues { display: grid; gap: 12px; padding: 16px 18px; border: 1px solid rgba(238, 190, 92, .24); border-radius: 14px; color: #f3d99e; background: rgba(194, 137, 40, .09); }
+.metadata-issues > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.metadata-issues > div strong { font-size: .86rem; }
+.metadata-issues > div span { color: #bfae8b; font-size: .72rem; }
+.metadata-issues ul { display: grid; gap: 6px; margin: 0; padding-left: 19px; color: #d7c8aa; font-size: .75rem; line-height: 1.5; }
+.metadata-results { display: grid; gap: 18px; }
+.metadata-panel { min-width: 0; padding: 18px; border: 1px solid rgba(255, 255, 255, .08); border-radius: 16px; background: rgba(255, 255, 255, .025); }
+.metadata-panel__title { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 15px; }
+.metadata-panel__title h3 { margin: 0 0 4px; font-size: .9rem; }
+.metadata-panel__title p { margin: 0; color: var(--muted); font-size: .72rem; }
+.metadata-panel__title > span { color: #9eacbe; font-size: .72rem; }
+.metadata-panel__title > button { flex: 0 0 auto; min-height: 34px; padding: 0 11px; border: 1px solid rgba(255, 255, 255, .11); border-radius: 9px; color: #aeb9c8; background: rgba(255, 255, 255, .045); cursor: pointer; }
+.metadata-panel__title > button:hover, .metadata-panel__title > .selection-clear--active { border-color: rgba(117, 222, 255, .35); color: #dff8ff; background: rgba(74, 177, 219, .11); }
+.metadata-panel__empty { margin: 0; padding: 18px 0; color: var(--muted); font-size: .76rem; text-align: center; }
+.tag-candidates { display: flex; flex-wrap: wrap; gap: 8px; }
+.tag-candidates span { padding: 6px 10px; border: 1px solid rgba(126, 214, 241, .17); border-radius: 999px; color: #badde8; background: rgba(72, 162, 190, .08); font-size: .72rem; }
+.image-candidates { display: grid; grid-auto-flow: column; gap: 12px; padding: 2px 2px 10px; overflow-x: auto; overscroll-behavior-inline: contain; }
+.image-candidates--cover { grid-auto-columns: minmax(145px, 180px); }
+.image-candidates--background { grid-auto-columns: minmax(245px, 300px); }
+.image-candidate { min-width: 0; padding: 7px; border: 1px solid rgba(255, 255, 255, .09); border-radius: 13px; color: #edf4fa; background: rgba(8, 14, 24, .7); cursor: pointer; text-align: left; transition: border-color 150ms ease, background 150ms ease, transform 150ms ease; }
+.image-candidate:hover { border-color: rgba(117, 222, 255, .34); transform: translateY(-2px); }
+.image-candidate--selected { border-color: rgba(117, 222, 255, .72); background: rgba(65, 162, 198, .13); box-shadow: 0 0 0 2px rgba(117, 222, 255, .08); }
+.image-candidate__preview { position: relative; display: grid; place-items: center; width: 100%; overflow: hidden; border-radius: 9px; color: #8e9bae; background: rgba(255, 255, 255, .045); }
+.image-candidate--cover .image-candidate__preview { aspect-ratio: 2 / 3; }
+.image-candidate--background .image-candidate__preview { aspect-ratio: 16 / 9; }
+.image-candidate__preview img { width: 100%; height: 100%; object-fit: cover; }
+.image-candidate__preview i { position: absolute; top: 7px; right: 7px; display: grid; place-items: center; width: 25px; height: 25px; border-radius: 50%; color: #09201a; background: #8ce9c3; box-shadow: 0 3px 12px rgba(0, 0, 0, .34); font-style: normal; font-weight: 900; }
+.image-candidate__fallback { padding: 12px; font-size: .7rem; text-align: center; }
+.image-candidate__meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 3px 2px; }
+.image-candidate__meta strong { font-size: .72rem; }
+.image-candidate__meta small { overflow: hidden; color: var(--muted); font-size: .65rem; text-overflow: ellipsis; white-space: nowrap; }
 .import-view__existing { display: flex; align-items: center; gap: 16px; min-height: 96px; padding: 18px; border: 1px solid rgba(113, 222, 181, .2); border-radius: 15px; background: rgba(65, 167, 127, .08); }
 .import-view__existing-icon { display: grid; place-items: center; flex: 0 0 auto; width: 42px; height: 42px; border-radius: 50%; color: #0c241b; background: #83e1ba; font-weight: 900; }
 .import-view__existing h3 { margin: 0 0 5px; font-size: .95rem; }
@@ -166,6 +395,6 @@ async function handleSelectExecutable(): Promise<void> {
 .import-view__empty-icon { display: grid; place-items: center; width: 58px; height: 58px; border: 1px dashed #52627a; border-radius: 18px; color: #8fa0b8; font-size: 1.8rem; }
 .import-view__empty h3 { margin: 15px 0 5px; }
 .import-view__empty p { margin: 0; color: var(--muted); font-size: .8rem; }
-@container levabox-app (max-width: 900px) { .import-view__actions { grid-template-columns: 1fr; } .import-draft { grid-template-columns: 1fr; } }
+@container levabox-app (max-width: 900px) { .import-view__actions { grid-template-columns: 1fr; } .import-draft { grid-template-columns: 1fr; } .import-query { align-items: stretch; flex-direction: column; } .metadata-panel__title { align-items: flex-start; } }
 @container levabox-app (max-height: 760px) { .import-view__actions { margin-top: 20px; } .import-card { min-height: 215px; } }
 </style>
